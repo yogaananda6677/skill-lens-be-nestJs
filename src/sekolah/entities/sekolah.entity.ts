@@ -24,8 +24,8 @@ export class Sekolah {
 
   @Column({
     type: 'enum',
-    enum: ['panding', 'sukses'],
-    nullable: true
+    enum: ['pending', 'approved'],
+    default: 'pending'
   })
   status_verifikasi!: string;
 

@@ -12,19 +12,26 @@ import { SemesterModule } from './semester/semester.module';
 import { MataPelajaranModule } from './mata_pelajaran/mata_pelajaran.module';
 import { KurikulumMapelModule } from './kurikulum_mapel/kurikulum_mapel.module';
 import { NilaiSiswaModule } from './nilai_siswa/nilai_siswa.module';
+import { AuthModule } from './auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: 'localhost',
       port: 3306,
       username: 'root',
-      password: 'root123',
+      password: '',
       database: 'skilllens_db',
       autoLoadEntities: true,
       synchronize: true,
     }),
+
     UserModule,
     AdminModule,
     GuruModule,
@@ -35,8 +42,7 @@ import { NilaiSiswaModule } from './nilai_siswa/nilai_siswa.module';
     MataPelajaranModule,
     KurikulumMapelModule,
     NilaiSiswaModule,
+    AuthModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

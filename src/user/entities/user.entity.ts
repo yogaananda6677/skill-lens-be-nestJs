@@ -12,8 +12,11 @@ export class User {
   @Column({ unique: true })
   email!: string;
 
-  @Column()
+  @Column({ nullable: true })
   no_hp!: string;
+
+  @Column({ unique: true })
+  username!: string;
 
   @Column()
   password!: string;
@@ -23,4 +26,7 @@ export class User {
     enum: ['admin', 'guru', 'siswa']
   })
   role!: string;
+
+  @Column({ nullable: true })
+  sekolahId!: number;
 }
