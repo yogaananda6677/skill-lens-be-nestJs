@@ -3,19 +3,21 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  JoinColumn
+  JoinColumn,
 } from 'typeorm';
 
 import { Sekolah } from '../../sekolah/entities/sekolah.entity';
 
-@Entity()
+@Entity('jurusan')
 export class Jurusan {
-
   @PrimaryGeneratedColumn()
   id_jurusan!: number;
 
-  @Column()
+  @Column({ type: 'varchar', length: 120 })
   nama_jurusan!: string;
+
+  @Column({ type: 'int' })
+  id_sekolah!: number;
 
   @ManyToOne(() => Sekolah)
   @JoinColumn({ name: 'id_sekolah' })

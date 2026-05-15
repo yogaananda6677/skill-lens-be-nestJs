@@ -14,6 +14,9 @@ import { KurikulumMapelModule } from './kurikulum_mapel/kurikulum_mapel.module';
 import { NilaiSiswaModule } from './nilai_siswa/nilai_siswa.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
+import { SeederModule } from './database/seeders/seeder.module';
+import { SuperadminModule } from './superadmin/superadmin.module';
+import { ProfileSiswaModule } from './profile_siswa/profile_siswa.module';
 
 @Module({
   imports: [
@@ -23,11 +26,11 @@ import { ConfigModule } from '@nestjs/config';
 
     TypeOrmModule.forRoot({
       type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'root',
-      password: '',
-      database: 'skilllens_db',
+      host: process.env.DB_HOST ?? 'localhost',
+      port: Number(process.env.DB_PORT ?? 3306),
+      username: process.env.DB_USERNAME ?? 'root',
+      password: process.env.DB_PASSWORD ?? 'root123',
+      database: process.env.DB_DATABASE ?? 'skilllens_db',
       autoLoadEntities: true,
       synchronize: true,
     }),
@@ -43,6 +46,11 @@ import { ConfigModule } from '@nestjs/config';
     KurikulumMapelModule,
     NilaiSiswaModule,
     AuthModule,
+    SeederModule,
+    SuperadminModule,
+    ProfileSiswaModule,
+    
   ],
+  
 })
 export class AppModule {}

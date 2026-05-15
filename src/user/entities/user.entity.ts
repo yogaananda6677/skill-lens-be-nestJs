@@ -1,32 +1,31 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity()
-export class User {
+export type UserRole = 'superadmin' | 'admin' | 'guru' | 'siswa';
 
+@Entity('users')
+export class User {
   @PrimaryGeneratedColumn()
   id_user!: number;
 
-  @Column()
+  @Column({ type: 'varchar', length: 120 })
   nama!: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', length: 150, unique: true })
   email!: string;
 
-  @Column({ nullable: true })
-  no_hp!: string;
+  @Column({ type: 'varchar', length: 25, nullable: true })
+  no_hp!: string | null;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', length: 80, unique: true })
   username!: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 255 })
   password!: string;
 
   @Column({
     type: 'enum',
-    enum: ['admin', 'guru', 'siswa']
+    enum: ['superadmin', 'admin', 'guru', 'siswa'],
+    default: 'siswa',
   })
-  role!: string;
-
-  @Column({ nullable: true })
-  sekolahId!: number;
+  role!: UserRole;
 }
