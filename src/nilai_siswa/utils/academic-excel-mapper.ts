@@ -70,7 +70,9 @@ export function classifySubject(rawSubject: string): SubjectCategoryResult {
   }
 
   for (const rule of KEYWORD_SUBJECT_CATEGORY_RULES) {
-    const matchedKeyword = rule.keywords.find((keyword) => key.includes(normalizeSubjectKey(keyword)));
+    const matchedKeyword = rule.keywords.find((keyword) =>
+      key.includes(normalizeSubjectKey(keyword)),
+    );
     if (matchedKeyword) {
       return {
         mapel: rawSubject.trim(),
@@ -93,7 +95,8 @@ export function classifySubject(rawSubject: string): SubjectCategoryResult {
 
 export function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number' && Number.isFinite(value)) return clampScore(value);
+  if (typeof value === 'number' && Number.isFinite(value))
+    return clampScore(value);
 
   const normalized = String(value)
     .replace(/%/g, '')
@@ -119,22 +122,23 @@ export function roundScore(value: number, digits = 2): number {
   return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
-export function parseSemesterNumber(sheetName: string, fallbackIndex?: number): number | null {
-  const normalized = normalizeSubjectKey(sheetName);
-  const match = normalized.match(/semester\s*(\d+)/) || normalized.match(/sem\s*(\d+)/);
+export function parseSemesterNumber(
+  sheetName: string,
+  fallbackIndex: number,
+): number | null {
+  const match = sheetName.match(/semester\s*(\d+)/i);
   if (match) {
-    const semester = Number(match[1]);
-    return semester >= 1 && semester <= 12 ? semester : null;
+    const sem = parseInt(match[1], 10);
+    if (sem >= 1 && sem <= 6) return sem; // dari 5 menjadi 6
   }
-
-  if (typeof fallbackIndex === 'number' && fallbackIndex >= 0 && fallbackIndex < 5) {
-    return fallbackIndex + 1;
-  }
-
+  const num = parseInt(sheetName, 10);
+  if (!isNaN(num) && num >= 1 && num <= 6) return num;
   return null;
 }
 
-export function parseSemesterWeights(input?: string | Record<string, number> | null): SemesterWeightParseResult {
+export function parseSemesterWeights(
+  input?: string | Record<string, number> | null,
+): SemesterWeightParseResult {
   const warnings: string[] = [];
   const weights: Record<number, number> = { ...DEFAULT_SEMESTER_WEIGHTS };
 
@@ -144,9 +148,13 @@ export function parseSemesterWeights(input?: string | Record<string, number> | n
   if (typeof input === 'string') {
     const trimmed = input.trim();
     try {
-      parsed = trimmed.startsWith('{') ? JSON.parse(trimmed) : trimmed.split(',').map((item) => Number(item.trim()));
+      parsed = trimmed.startsWith('{')
+        ? JSON.parse(trimmed)
+        : trimmed.split(',').map((item) => Number(item.trim()));
     } catch {
-      warnings.push('Format bobot semester tidak valid. Sistem memakai bobot default semester 1-5.');
+      warnings.push(
+        'Format bobot semester tidak valid. Sistem memakai bobot default semester 1-5.',
+      );
       return { weights, warnings };
     }
   }
@@ -154,32 +162,44 @@ export function parseSemesterWeights(input?: string | Record<string, number> | n
   if (Array.isArray(parsed)) {
     parsed.forEach((weight, index) => {
       const numericWeight = Number(weight);
-      if (Number.isFinite(numericWeight) && numericWeight > 0) weights[index + 1] = numericWeight;
+      if (Number.isFinite(numericWeight) && numericWeight > 0)
+        weights[index + 1] = numericWeight;
     });
     return { weights, warnings };
   }
 
   if (typeof parsed === 'object' && parsed !== null) {
-    Object.entries(parsed as Record<string, unknown>).forEach(([semesterKey, weight]) => {
-      const match = normalizeSubjectKey(semesterKey).match(/(\d+)/);
-      const semester = match ? Number(match[1]) : Number(semesterKey);
-      const numericWeight = Number(weight);
+    Object.entries(parsed as Record<string, unknown>).forEach(
+      ([semesterKey, weight]) => {
+        const match = normalizeSubjectKey(semesterKey).match(/(\d+)/);
+        const semester = match ? Number(match[1]) : Number(semesterKey);
+        const numericWeight = Number(weight);
 
-      if (Number.isFinite(semester) && semester >= 1 && Number.isFinite(numericWeight) && numericWeight > 0) {
-        weights[semester] = numericWeight;
-      }
-    });
+        if (
+          Number.isFinite(semester) &&
+          semester >= 1 &&
+          Number.isFinite(numericWeight) &&
+          numericWeight > 0
+        ) {
+          weights[semester] = numericWeight;
+        }
+      },
+    );
     return { weights, warnings };
   }
 
-  warnings.push('Format bobot semester tidak dikenali. Sistem memakai bobot default semester 1-5.');
+  warnings.push(
+    'Format bobot semester tidak dikenali. Sistem memakai bobot default semester 1-5.',
+  );
   return { weights, warnings };
 }
 
 export function buildSubjectColumns(headerRow: unknown[]): SubjectColumnMeta[] {
   return headerRow
     .map((cell, columnIndex) => ({ cell, columnIndex }))
-    .filter(({ cell }) => !isIdentityHeader(cell) && !isIgnoredSubjectHeader(cell))
+    .filter(
+      ({ cell }) => !isIdentityHeader(cell) && !isIgnoredSubjectHeader(cell),
+    )
     .map(({ cell, columnIndex }) => {
       const header = String(cell ?? '').trim();
       const category = classifySubject(header);
@@ -191,9 +211,14 @@ export function buildSubjectColumns(headerRow: unknown[]): SubjectColumnMeta[] {
     });
 }
 
-export function emptyAcademicScores(defaultValue = 0): Record<AcademicCategory, number> {
-  return NILAI_AKADEMIK_CATEGORIES.reduce((acc, category) => {
-    acc[category] = defaultValue;
-    return acc;
-  }, {} as Record<AcademicCategory, number>);
+export function emptyAcademicScores(
+  defaultValue = 0,
+): Record<AcademicCategory, number> {
+  return NILAI_AKADEMIK_CATEGORIES.reduce(
+    (acc, category) => {
+      acc[category] = defaultValue;
+      return acc;
+    },
+    {} as Record<AcademicCategory, number>,
+  );
 }

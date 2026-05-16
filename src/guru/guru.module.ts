@@ -9,7 +9,15 @@ import { Sekolah } from '../sekolah/entities/sekolah.entity';
 import { Jurusan } from '../jurusan/entities/jurusan.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guru, Siswa, NilaiKategoriSiswa, Sekolah, Jurusan])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Guru,
+      Siswa,
+      NilaiKategoriSiswa,
+      Sekolah,
+      Jurusan,
+    ]),
+  ],
   controllers: [GuruController],
   providers: [GuruService],
 })

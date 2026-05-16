@@ -35,17 +35,23 @@ export class SuperadminService {
 
   async createAdmin(body: any) {
     const nama = String(body?.nama ?? '').trim();
-    const email = String(body?.email ?? '').trim().toLowerCase();
-    const username = String(body?.username ?? '').trim().toLowerCase();
+    const email = String(body?.email ?? '')
+      .trim()
+      .toLowerCase();
+    const username = String(body?.username ?? '')
+      .trim()
+      .toLowerCase();
     const password = String(body?.password ?? '').trim();
     const noHp = body?.no_hp ? String(body.no_hp).trim() : null;
 
     if (!nama || !email || !username || !password) {
-      throw new BadRequestException('Nama, email, username, dan password wajib diisi.');
+      throw new BadRequestException(
+        'Nama, email, username, dan password wajib diisi.',
+      );
     }
 
     const existing = await this.userRepo.findOne({
-      where: [{ email }, { username }] as any,
+      where: [{ email }, { username }],
     });
 
     if (existing) {
@@ -91,12 +97,16 @@ export class SuperadminService {
       throw new BadRequestException('Akun ini bukan admin.');
     }
 
-    const email = body?.email ? String(body.email).trim().toLowerCase() : undefined;
-    const username = body?.username ? String(body.username).trim().toLowerCase() : undefined;
+    const email = body?.email
+      ? String(body.email).trim().toLowerCase()
+      : undefined;
+    const username = body?.username
+      ? String(body.username).trim().toLowerCase()
+      : undefined;
 
     if (email) {
       const existingEmail = await this.userRepo.findOne({
-        where: { email, id_user: Not(id) } as any,
+        where: { email, id_user: Not(id) },
       });
 
       if (existingEmail) {
@@ -108,7 +118,7 @@ export class SuperadminService {
 
     if (username) {
       const existingUsername = await this.userRepo.findOne({
-        where: { username, id_user: Not(id) } as any,
+        where: { username, id_user: Not(id) },
       });
 
       if (existingUsername) {
@@ -155,7 +165,9 @@ export class SuperadminService {
     }
 
     if (admin.role !== 'admin') {
-      throw new BadRequestException('Hanya akun admin yang boleh dihapus dari menu ini.');
+      throw new BadRequestException(
+        'Hanya akun admin yang boleh dihapus dari menu ini.',
+      );
     }
 
     await this.userRepo.remove(admin);

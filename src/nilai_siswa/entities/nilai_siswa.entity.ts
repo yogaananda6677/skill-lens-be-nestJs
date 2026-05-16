@@ -13,7 +13,6 @@ import { KurikulumMapel } from '../../kurikulum_mapel/entities/kurikulum_mapel.e
 @Entity()
 @Index(['id_siswa', 'id_kurikulum_mapel'], { unique: true })
 export class NilaiSiswa {
-
   @PrimaryGeneratedColumn()
   id_nilai!: number;
 

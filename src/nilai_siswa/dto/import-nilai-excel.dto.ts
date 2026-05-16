@@ -22,7 +22,9 @@ export interface ImportNilaiExcelOptions {
   semesterWeights?: string;
 }
 
-export function normalizeImportNilaiOptions(dto: ImportNilaiExcelDto = {}): ImportNilaiExcelOptions {
+export function normalizeImportNilaiOptions(
+  dto: ImportNilaiExcelDto = {},
+): ImportNilaiExcelOptions {
   const now = new Date();
   const currentYear = now.getFullYear();
   const nextYear = currentYear + 1;

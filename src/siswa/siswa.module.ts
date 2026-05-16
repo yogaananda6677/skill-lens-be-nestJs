@@ -11,6 +11,8 @@ import { NilaiKategoriSiswa } from '../nilai_siswa/entities/nilai_kategori_siswa
 @Module({
   controllers: [SiswaController],
   providers: [SiswaService],
-  imports: [TypeOrmModule.forFeature([Siswa, User, ProfileSiswa, NilaiKategoriSiswa])],
+  imports: [
+    TypeOrmModule.forFeature([Siswa, User, ProfileSiswa, NilaiKategoriSiswa]),
+  ],
 })
 export class SiswaModule {}

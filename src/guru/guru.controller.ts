@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { GuruService } from './guru.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoleGuard } from '../auth/role';
@@ -23,7 +33,6 @@ export class GuruController {
     return this.guruService.requestNewSchool(req.user.id_user, body);
   }
 
-
   @Get('jurusan')
   getJurusan(@Req() req: any) {
     return this.guruService.getJurusan(req.user.id_user);
@@ -47,5 +56,10 @@ export class GuruController {
   @Get('guidance-cases')
   getGuidanceCases(@Req() req: any) {
     return this.guruService.getGuidanceCases(req.user.id_user);
+  }
+
+  @Get('accounts')
+  getSiswaAccounts(@Req() req: any) {
+    return this.guruService.getSiswaAccounts(req.user.id_user);
   }
 }

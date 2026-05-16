@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -45,6 +49,55 @@ export class SiswaService {
     private readonly kategoriRepo: Repository<NilaiKategoriSiswa>,
   ) {}
 
+  /**
+   * Roadmap saat ini belum tersimpan di DB, jadi endpoint ini mengembalikan template default
+   * berbasis careerId agar FE bisa diambil dari backend.
+   */
+  async getRoadmap(careerId: string) {
+    const id = String(careerId ?? "").trim() || "default";
+
+    const defaultRoadmap = {
+      careerId: "default",
+      headline: "Roadmap Pengembangan Diri",
+      targetRole: "Pilihan lanjutan sesuai rekomendasi SPK",
+      initialCompleted: 0,
+      steps: [
+        {
+          id: "validasi",
+          phase: "Tahap 1",
+          title: "Validasi hasil rekomendasi",
+          description:
+            "Diskusikan hasil SPK dengan guru pembimbing agar pilihan sesuai kondisi akademik dan rencana pribadi.",
+          duration: "1 minggu",
+          output: "Pilihan utama tervalidasi",
+          checklist: ["Baca hasil rekomendasi", "Catat alasan pilihan", "Diskusi dengan guru"],
+        },
+        {
+          id: "rencana",
+          phase: "Tahap 2",
+          title: "Susun rencana belajar",
+          description:
+            "Tentukan kompetensi awal yang perlu diperkuat sesuai arah rekomendasi.",
+          duration: "2 minggu",
+          output: "Daftar target belajar",
+          checklist: ["Pilih kompetensi", "Tentukan jadwal", "Cari sumber belajar"],
+        },
+        {
+          id: "portofolio",
+          phase: "Tahap 3",
+          title: "Mulai portofolio awal",
+          description:
+            "Buat satu bukti karya sederhana untuk mendukung pilihan kuliah, kerja, atau pelatihan.",
+          duration: "1 bulan",
+          output: "Portofolio awal",
+          checklist: ["Pilih proyek", "Kerjakan bertahap", "Dokumentasikan hasil"],
+        },
+      ],
+    };
+
+    return { ...defaultRoadmap, careerId: id };
+  }
+
   async getMe(userId: number) {
     const siswa = await this.siswaRepo.findOne({
       where: { user: { id_user: userId } as any },
@@ -60,10 +113,18 @@ export class SiswaService {
       this.kategoriRepo.find({ where: { id_siswa: siswa.id_siswa } }),
     ]);
 
-    const nilaiAkademik = nilaiKategori.reduce((acc, item) => {
-      acc[item.kategori] = Number(item.nilai ?? 0);
-      return acc;
-    }, {} as Record<string, number>);
+    const nilaiAkademik = nilaiKategori.reduce(
+      (acc, item) => {
+        acc[item.kategori] = Number(item.nilai ?? 0);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    const minat = Array.isArray(profile?.minat) ? profile!.minat! : [];
+    const hobi = Array.isArray(profile?.hobi) ? profile!.hobi! : [];
+    const bakat = Array.isArray(profile?.bakat) ? profile!.bakat! : [];
+    const skill = Array.isArray(profile?.skill) ? profile!.skill! : [];
 
     return {
       id_siswa: siswa.id_siswa,
@@ -80,10 +141,10 @@ export class SiswaService {
             status: siswa.sekolah.status_verifikasi,
           }
         : null,
-      minat: profile?.minat ?? [],
-      hobi: profile?.hobi ?? [],
-      bakat: profile?.bakat ?? [],
-      skill: profile?.skill ?? [],
+      minat,
+      hobi,
+      bakat,
+      skill,
       prestasi: profile?.prestasi ?? '',
       tujuan: profile?.tujuan ?? '',
       preferensi_belajar: profile?.preferensi_belajar ?? '',
@@ -102,7 +163,9 @@ export class SiswaService {
       throw new NotFoundException('Data siswa tidak ditemukan.');
     }
 
-    let profile = await this.profileRepo.findOne({ where: { id_siswa: siswa.id_siswa } });
+    let profile = await this.profileRepo.findOne({
+      where: { id_siswa: siswa.id_siswa },
+    });
 
     if (!profile) {
       profile = this.profileRepo.create({
@@ -117,7 +180,8 @@ export class SiswaService {
     profile.skill = toStringArray(body?.skill);
     profile.prestasi = String(body?.prestasi ?? '').trim() || null;
     profile.tujuan = String(body?.tujuan ?? '').trim() || null;
-    profile.preferensi_belajar = String(body?.preferensi_belajar ?? '').trim() || null;
+    profile.preferensi_belajar =
+      String(body?.preferensi_belajar ?? '').trim() || null;
     profile.kendala = String(body?.kendala ?? '').trim() || null;
 
     const saved = await this.profileRepo.save(profile);
@@ -135,8 +199,13 @@ export class SiswaService {
     await this.updateProfil(userId, body);
     const siswa = await this.getMe(userId);
 
-    if (!siswa.nilai_akademik || Object.keys(siswa.nilai_akademik).length === 0) {
-      throw new BadRequestException('Nilai akademik siswa belum tersedia. Hubungi guru untuk memproses data nilai.');
+    if (
+      !siswa.nilai_akademik ||
+      Object.keys(siswa.nilai_akademik).length === 0
+    ) {
+      throw new BadRequestException(
+        'Nilai akademik siswa belum tersedia. Hubungi guru untuk memproses data nilai.',
+      );
     }
 
     const payload = {
@@ -157,17 +226,33 @@ export class SiswaService {
       kendala: siswa.kendala,
     };
 
-    const spkUrl = process.env.SPK_API_URL || 'http://localhost:8000/rekomendasi';
-    const response = await fetch(spkUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const spkBaseUrl =
+      process.env.SPK_API_URL ||
+      process.env.PYTHON_API ||
+      'http://127.0.0.1:8000';
 
-    const result = await response.json().catch(() => null);
+    const spkUrl = `${spkBaseUrl.replace(/\/$/, '')}/rekomendasi`;
 
-    if (!response.ok) {
-      throw new BadRequestException(result?.message || 'Gagal memproses rekomendasi dari layanan SPK.');
+    let response: Response | null = null;
+    let result: unknown = null;
+
+    try {
+      response = await fetch(spkUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      result = await response.json().catch(() => null);
+    } catch (err) {
+      throw new BadRequestException(
+        'Layanan SPK belum tersedia. Pastikan server Python berjalan dan endpoint /rekomendasi bisa diakses (cek PYTHON_API/SPK_API_URL).',
+      );
+    }
+
+    if (!response || !response.ok) {
+      throw new BadRequestException(
+        (result as any)?.message || 'Gagal memproses rekomendasi dari layanan SPK.',
+      );
     }
 
     return {
@@ -179,39 +264,66 @@ export class SiswaService {
 
   async importExcel(file: any) {
     if (!file?.buffer) {
-      throw new BadRequestException('File Excel belum dikirim. Gunakan field multipart bernama file.');
+      throw new BadRequestException(
+        'File Excel belum dikirim. Gunakan field multipart bernama file.',
+      );
     }
 
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(workbook.Sheets[sheetName], {
-      defval: '',
-      raw: false,
-    });
+    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(
+      workbook.Sheets[sheetName],
+      {
+        defval: '',
+        raw: false,
+      },
+    );
 
     let imported = 0;
     let updated = 0;
-    const accounts: Array<{ nisn: string; nama: string; username: string; password_default: string; akun_baru: boolean }> = [];
+    const accounts: Array<{
+      nisn: string;
+      nama: string;
+      username: string;
+      password_default: string;
+      akun_baru: boolean;
+    }> = [];
 
     for (const row of rows) {
-      const normalizedRow = Object.entries(row).reduce((acc, [key, value]) => {
-        acc[normalizeKey(key)] = value;
-        return acc;
-      }, {} as Record<string, any>);
+      const normalizedRow = Object.entries(row).reduce(
+        (acc, [key, value]) => {
+          acc[normalizeKey(key)] = value;
+          return acc;
+        },
+        {} as Record<string, any>,
+      );
 
       const nisn = String(normalizedRow.nisn || normalizedRow.nis || '').trim();
-      const nama = String(normalizedRow.nama || normalizedRow['nama siswa'] || '').trim();
+      const nama = String(
+        normalizedRow.nama || normalizedRow['nama siswa'] || '',
+      ).trim();
       const kelas = String(normalizedRow.kelas || '').trim() || '-';
-      const jurusan = String(normalizedRow.jurusan || normalizedRow['program keahlian'] || normalizedRow['kompetensi keahlian'] || '').trim() || '-';
+      const jurusan =
+        String(
+          normalizedRow.jurusan ||
+            normalizedRow['program keahlian'] ||
+            normalizedRow['kompetensi keahlian'] ||
+            '',
+        ).trim() || '-';
 
       if (!nisn || !nama) continue;
 
-      let siswa = await this.siswaRepo.findOne({ where: { nisn }, relations: ['user'] });
+      let siswa = await this.siswaRepo.findOne({
+        where: { nisn },
+        relations: ['user'],
+      });
       let akunBaru = false;
       let username = siswa?.user?.username || '';
 
       if (!siswa) {
-        username = await this.generateUniqueUsername(createUsername(nama, nisn));
+        username = await this.generateUniqueUsername(
+          createUsername(nama, nisn),
+        );
         const password = await bcrypt.hash(nisn, 12);
         const userBaru = await this.userRepo.save({
           nama,

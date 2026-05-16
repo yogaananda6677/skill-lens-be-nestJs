@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import type { ImportNilaiExcelDto } from './dto/import-nilai-excel.dto';
@@ -28,7 +37,9 @@ export class NilaiSiswaController {
   }
 
   @Get('akademik/:idSiswa')
-  getProfilAkademik(@Param('idSiswa', ParseIntPipe) idSiswa: number): Promise<ProfilAkademikResponse> {
+  getProfilAkademik(
+    @Param('idSiswa', ParseIntPipe) idSiswa: number,
+  ): Promise<ProfilAkademikResponse> {
     return this.nilaiSiswaService.getProfilAkademik(idSiswa);
   }
 }

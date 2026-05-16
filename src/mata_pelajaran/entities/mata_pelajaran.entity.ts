@@ -1,16 +1,10 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  Index,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
 
 import { NILAI_AKADEMIK_CATEGORIES } from '../../nilai_siswa/constants/academic-categories';
 import type { AcademicCategory } from '../../nilai_siswa/constants/academic-categories';
 
 @Entity()
 export class MataPelajaran {
-
   @PrimaryGeneratedColumn()
   id_mapel!: number;
 

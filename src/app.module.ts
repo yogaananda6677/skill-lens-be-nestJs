@@ -49,8 +49,6 @@ import { ProfileSiswaModule } from './profile_siswa/profile_siswa.module';
     SeederModule,
     SuperadminModule,
     ProfileSiswaModule,
-    
   ],
-  
 })
 export class AppModule {}
