@@ -116,7 +116,7 @@ export class SiswaService {
     profile.bakat = toStringArray(body?.bakat);
     profile.skill = toStringArray(body?.skill);
     profile.prestasi = String(body?.prestasi ?? '').trim() || null;
-    profile.tujuan = String(body?.tujuan ?? '').trim() || null;
+    profile.tujuan_karir = String(body?.tujuan_karir ?? '').trim() || null;
     profile.preferensi_belajar = String(body?.preferensi_belajar ?? '').trim() || null;
     profile.kendala = String(body?.kendala ?? '').trim() || null;
 

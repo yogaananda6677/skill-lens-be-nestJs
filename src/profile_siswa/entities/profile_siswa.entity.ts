@@ -20,27 +20,6 @@ export class ProfileSiswa {
   @JoinColumn({ name: 'id_siswa' })
   siswa!: Siswa;
 
-  @Column({ type: 'simple-json', nullable: true })
-  minat!: string[] | null;
-
-  @Column({ type: 'simple-json', nullable: true })
-  hobi!: string[] | null;
-
-  @Column({ type: 'simple-json', nullable: true })
-  bakat!: string[] | null;
-
-  @Column({ type: 'simple-json', nullable: true })
-  skill!: string[] | null;
-
   @Column({ type: 'text', nullable: true })
-  prestasi!: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  tujuan!: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  preferensi_belajar!: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  kendala!: string | null;
+  tujuan_karir!: string | null;
 }

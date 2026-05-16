@@ -17,6 +17,10 @@ import { ConfigModule } from '@nestjs/config';
 import { SeederModule } from './database/seeders/seeder.module';
 import { SuperadminModule } from './superadmin/superadmin.module';
 import { ProfileSiswaModule } from './profile_siswa/profile_siswa.module';
+import { MasterTagsController } from './master_tags/master_tags.controller';
+import { MasterTagsService } from './master_tags/master_tags.service';
+import { MasterTagsModule } from './master_tags/master_tags.module';
+import { SiswaTagModule } from './siswa_tag/siswa_tag.module';
 
 @Module({
   imports: [
@@ -49,8 +53,12 @@ import { ProfileSiswaModule } from './profile_siswa/profile_siswa.module';
     SeederModule,
     SuperadminModule,
     ProfileSiswaModule,
+    MasterTagsModule,
+    SiswaTagModule,
     
   ],
+  controllers: [MasterTagsController],
+  providers: [MasterTagsService],
   
 })
 export class AppModule {}
