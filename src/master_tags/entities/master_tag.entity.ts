@@ -1,22 +1,33 @@
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-} from 'typeorm';
+import { SiswaTag } from '../../siswa_tag/entities/siswa_tag.entity';
 
+export type MasterTagTipe = 'minat' | 'bakat' | 'hobi' | 'pengalaman';
 
-@Entity('master_tag')
+@Entity('master_tags')
+@Unique(['tipe', 'mapped_key'])
 export class MasterTag {
   @PrimaryGeneratedColumn()
-  id_master_tag!: number;
+  id!: number;
+
+  @Column({ type: 'varchar', length: 50 })
+  tipe!: MasterTagTipe;
+
+  @Column({ type: 'varchar', length: 150 })
+  label!: string;
 
   @Column({ type: 'varchar', length: 120 })
-  nama_tag!: string;
+  mapped_key!: string;
 
-  @Column({ type: 'varchar', length: 120 })
-  kategori_tag!: string;
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  kategori_hint!: string | null;
 
-  @Column({ type: 'varchar', length: 120 })
-  tipe_tag!: string;
+  @Column({ type: 'int', default: 0 })
+  sort_order!: number;
+
+  @Column({ type: 'tinyint', default: 1 })
+  is_active!: number;
+
+  @OneToMany(() => SiswaTag, (siswaTag) => siswaTag.masterTag)
+  siswaTags!: SiswaTag[];
 }

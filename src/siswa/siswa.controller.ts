@@ -42,4 +42,12 @@ export class SiswaController {
   importExcel(@UploadedFile() file: any) {
     return this.siswaService.importExcel(file);
   }
+
+  @Get('roadmap')
+  getRoadmap(@Req() req: any) {
+    // roadmap saat ini masih berbasis careerId dari query, tapi tetap dikunci untuk siswa.
+    // FE kirim: /siswa/roadmap?careerId=...
+    const careerId = req?.query?.careerId ?? 'default';
+    return this.siswaService.getRoadmap(careerId);
+  }
 }

@@ -30,12 +30,9 @@ export class AdminSeeder implements OnModuleInit {
       username: 'superadmin',
       password: hashedPassword,
       role: 'superadmin',
-        
-    })
-
-    const admin = this.userRepo.create({
-
     });
+
+    const admin = this.userRepo.create({});
 
     await this.userRepo.save(superAdmin);
 

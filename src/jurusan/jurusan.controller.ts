@@ -7,7 +7,9 @@ export class JurusanController {
 
   @Get()
   findAll(@Query('sekolahId') sekolahId?: string) {
-    return this.jurusanService.findAll(sekolahId ? Number(sekolahId) : undefined);
+    return this.jurusanService.findAll(
+      sekolahId ? Number(sekolahId) : undefined,
+    );
   }
 
   @Post()

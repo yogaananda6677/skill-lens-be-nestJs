@@ -13,9 +13,10 @@ import { Semester } from '../../semester/entities/semester.entity';
 import { MataPelajaran } from '../../mata_pelajaran/entities/mata_pelajaran.entity';
 
 @Entity()
-@Index(['id_sekolah', 'id_jurusan', 'id_semester', 'id_mapel'], { unique: true })
+@Index(['id_sekolah', 'id_jurusan', 'id_semester', 'id_mapel'], {
+  unique: true,
+})
 export class KurikulumMapel {
-
   @PrimaryGeneratedColumn()
   id_kurikulum_mapel!: number;
 

@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -19,7 +24,7 @@ export class AuthService {
 
   async login(username: string, password: string) {
     const user = await this.userRepo.findOne({
-      where: [{ username }, { email: username }] as any,
+      where: [{ username }, { email: username }],
     });
 
     if (!user) {
@@ -53,19 +58,25 @@ export class AuthService {
 
   async registerGuru(body: any) {
     const nama = String(body?.nama ?? '').trim();
-    const email = String(body?.email ?? '').trim().toLowerCase();
-    const username = String(body?.username ?? '').trim().toLowerCase();
+    const email = String(body?.email ?? '')
+      .trim()
+      .toLowerCase();
+    const username = String(body?.username ?? '')
+      .trim()
+      .toLowerCase();
     const password = String(body?.password ?? '');
     const nip = String(body?.nip ?? '').trim();
     const noHp = String(body?.no_hp ?? body?.noHp ?? '').trim();
     const jabatan = String(body?.jabatan ?? 'Guru').trim();
 
     if (!nama || !email || !username || !password || !nip) {
-      throw new BadRequestException('Nama, email, username, password, dan NIP/NUPTK wajib diisi.');
+      throw new BadRequestException(
+        'Nama, email, username, password, dan NIP/NUPTK wajib diisi.',
+      );
     }
 
     const existing = await this.userRepo.findOne({
-      where: [{ email }, { username }] as any,
+      where: [{ email }, { username }],
     });
     if (existing) {
       throw new ConflictException('Email atau username sudah digunakan.');
@@ -98,7 +109,8 @@ export class AuthService {
     );
 
     return {
-      message: 'Akun guru berhasil dibuat. Silakan login dan lengkapi data sekolah.',
+      message:
+        'Akun guru berhasil dibuat. Silakan login dan lengkapi data sekolah.',
       data: {
         id_user: user.id_user,
         id_guru: guru.id_guru,

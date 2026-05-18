@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './user/user.module';
 import { AdminModule } from './admin/admin.module';
 import { GuruModule } from './guru/guru.module';
@@ -13,12 +15,9 @@ import { MataPelajaranModule } from './mata_pelajaran/mata_pelajaran.module';
 import { KurikulumMapelModule } from './kurikulum_mapel/kurikulum_mapel.module';
 import { NilaiSiswaModule } from './nilai_siswa/nilai_siswa.module';
 import { AuthModule } from './auth/auth.module';
-import { ConfigModule } from '@nestjs/config';
 import { SeederModule } from './database/seeders/seeder.module';
 import { SuperadminModule } from './superadmin/superadmin.module';
 import { ProfileSiswaModule } from './profile_siswa/profile_siswa.module';
-import { MasterTagsController } from './master_tags/master_tags.controller';
-import { MasterTagsService } from './master_tags/master_tags.service';
 import { MasterTagsModule } from './master_tags/master_tags.module';
 import { SiswaTagModule } from './siswa_tag/siswa_tag.module';
 
@@ -55,10 +54,8 @@ import { SiswaTagModule } from './siswa_tag/siswa_tag.module';
     ProfileSiswaModule,
     MasterTagsModule,
     SiswaTagModule,
-    
   ],
-  controllers: [MasterTagsController],
-  providers: [MasterTagsService],
-  
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

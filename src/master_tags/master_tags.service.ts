@@ -1,26 +1,56 @@
 import { Injectable } from '@nestjs/common';
-import { CreateMasterTagDto } from './dto/create-master_tag.dto';
-import { UpdateMasterTagDto } from './dto/update-master_tag.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { MasterTag, MasterTagTipe } from './entities/master_tag.entity';
+
+type GroupedTags = Record<MasterTagTipe, Array<{
+  id: number;
+  tipe: MasterTagTipe;
+  label: string;
+  mapped_key: string;
+  kategori_hint: string | null;
+  sort_order: number;
+}>>;
 
 @Injectable()
 export class MasterTagsService {
-  create(createMasterTagDto: CreateMasterTagDto) {
-    return 'This action adds a new masterTag';
-  }
+  constructor(
+    @InjectRepository(MasterTag)
+    private readonly masterTagRepo: Repository<MasterTag>,
+  ) {}
 
-  findAll() {
-    return `This action returns all masterTags`;
-  }
+  async findAll(tipe?: string) {
+    const where: any = { is_active: 1 };
+    if (tipe) where.tipe = tipe.toLowerCase();
 
-  findOne(id: number) {
-    return `This action returns a #${id} masterTag`;
-  }
+    const rows = await this.masterTagRepo.find({
+      where,
+      order: { tipe: 'ASC', sort_order: 'ASC', id: 'ASC' },
+    });
 
-  update(id: number, updateMasterTagDto: UpdateMasterTagDto) {
-    return `This action updates a #${id} masterTag`;
-  }
+    const mapRow = (row: MasterTag) => ({
+      id: row.id,
+      tipe: row.tipe,
+      label: row.label,
+      mapped_key: row.mapped_key,
+      kategori_hint: row.kategori_hint,
+      sort_order: row.sort_order,
+    });
 
-  remove(id: number) {
-    return `This action removes a #${id} masterTag`;
+    if (tipe) return rows.map(mapRow);
+
+    const grouped: GroupedTags = {
+      minat: [],
+      bakat: [],
+      hobi: [],
+      pengalaman: [],
+    };
+
+    for (const row of rows) {
+      if (row.tipe in grouped) grouped[row.tipe].push(mapRow(row));
+    }
+
+    return grouped;
   }
 }

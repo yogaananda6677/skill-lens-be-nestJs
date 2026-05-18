@@ -2,7 +2,8 @@ import type { ConfigService } from '@nestjs/config';
 import type { SignOptions } from 'jsonwebtoken';
 
 export const DEFAULT_JWT_EXPIRES_IN = '1d';
-export const LOCAL_DEVELOPMENT_JWT_SECRET = 'skilllens-local-development-secret-change-before-production';
+export const LOCAL_DEVELOPMENT_JWT_SECRET =
+  'skilllens-local-development-secret-change-before-production';
 
 export type JwtExpiresIn = NonNullable<SignOptions['expiresIn']>;
 
@@ -16,7 +17,8 @@ export function getJwtSecret(configService: ConfigService): string {
 }
 
 export function getJwtExpiresIn(configService: ConfigService): JwtExpiresIn {
-  const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || DEFAULT_JWT_EXPIRES_IN;
+  const expiresIn =
+    configService.get<string>('JWT_EXPIRES_IN') || DEFAULT_JWT_EXPIRES_IN;
 
   // @nestjs/jwt follows jsonwebtoken's SignOptions type. In newer versions,
   // expiresIn is typed as number | ms.StringValue, not plain string.
