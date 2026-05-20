@@ -17,25 +17,23 @@ export class AdminSeeder implements OnModuleInit {
       where: { username: 'superadmin' },
     });
 
-    if (existingAdmin) {
-      return;
-    }
+    if (existingAdmin) return;
 
     const hashedPassword = await bcrypt.hash('admin123', 12);
 
-    const superAdmin = this.userRepo.create({
-      nama: 'superadmin',
-      email: 'superadmin@skilllens.local',
-      no_hp: '-',
-      username: 'superadmin',
-      password: hashedPassword,
-      role: 'superadmin',
-    });
+    await this.userRepo.save(
+      this.userRepo.create({
+        nama: 'Super Admin SkillLens',
+        email: 'superadmin@skilllens.local',
+        no_hp: '-',
+        username: 'superadmin',
+        password: hashedPassword,
+        role: 'superadmin',
+        id_sekolah: null,
+        must_change_password: 1,
+      }),
+    );
 
-    const admin = this.userRepo.create({});
-
-    await this.userRepo.save(superAdmin);
-
-    console.log('Admin default berhasil dibuat');
+    console.log('Superadmin default berhasil dibuat: superadmin / admin123');
   }
 }

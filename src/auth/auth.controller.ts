@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RoleGuard } from './role';
+
 
 @Controller('auth')
 export class AuthController {
@@ -10,6 +11,11 @@ export class AuthController {
   @Post('login')
   login(@Body() body: any) {
     return this.authService.login(body.username, body.password);
+  }
+
+  @Post('register-admin-sekolah')
+  registerAdminSekolah(@Body() body: any) {
+    return this.authService.registerAdminSekolah(body);
   }
 
   @Post('register-guru')
@@ -28,4 +34,12 @@ export class AuthController {
   adminOnly() {
     return 'halaman admin';
   }
+
+  @Get('check-availability')
+    checkAvailability(
+    @Query('username') username?: string,
+    @Query('email') email?: string,
+    ) {
+    return this.authService.checkAvailability(username, email);
+    }
 }

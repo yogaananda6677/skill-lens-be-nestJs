@@ -6,10 +6,13 @@ import {
   ParseIntPipe,
   Post,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RoleGuard } from '../auth/role';
 import type { ImportNilaiExcelDto } from './dto/import-nilai-excel.dto';
 import { NilaiSiswaService } from './nilai_siswa.service';
 import type {
@@ -22,8 +25,9 @@ import type {
 export class NilaiSiswaController {
   constructor(private readonly nilaiSiswaService: NilaiSiswaService) {}
 
+  @UseGuards(JwtAuthGuard, new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin']))
   @Post('import-excel')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024 } }))
   importExcel(
     @UploadedFile() file: any,
     @Body() body: ImportNilaiExcelDto,
@@ -36,6 +40,7 @@ export class NilaiSiswaController {
     return this.nilaiSiswaService.getMappingMapel();
   }
 
+  @UseGuards(JwtAuthGuard, new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin', 'siswa']))
   @Get('akademik/:idSiswa')
   getProfilAkademik(
     @Param('idSiswa', ParseIntPipe) idSiswa: number,

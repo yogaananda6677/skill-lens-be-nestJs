@@ -45,6 +45,7 @@ export class MasterTagsService {
       bakat: [],
       hobi: [],
       pengalaman: [],
+      prestasi: [],
     };
 
     for (const row of rows) {

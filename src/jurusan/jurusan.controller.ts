@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RoleGuard } from '../auth/role';
 import { JurusanService } from './jurusan.service';
 
 @Controller('jurusan')
@@ -12,6 +14,7 @@ export class JurusanController {
     );
   }
 
+  @UseGuards(JwtAuthGuard, new RoleGuard(['superadmin', 'admin', 'admin_sekolah', 'guru']))
   @Post()
   create(@Body() body: any) {
     return this.jurusanService.create(body);

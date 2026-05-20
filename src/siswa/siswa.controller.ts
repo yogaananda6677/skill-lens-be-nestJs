@@ -11,13 +11,13 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
-import { SiswaService } from './siswa.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoleGuard } from '../auth/role';
+import { SiswaService } from './siswa.service';
 
 @Controller('siswa')
 export class SiswaController {
-  constructor(private siswaService: SiswaService) {}
+  constructor(private readonly siswaService: SiswaService) {}
 
   @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
   @Get('me')
@@ -37,17 +37,10 @@ export class SiswaController {
     return this.siswaService.prosesSpk(req.user.id_user, body);
   }
 
+  @UseGuards(JwtAuthGuard, new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin']))
   @Post('import')
-  @UseInterceptors(FileInterceptor('file'))
-  importExcel(@UploadedFile() file: any) {
-    return this.siswaService.importExcel(file);
-  }
-
-  @Get('roadmap')
-  getRoadmap(@Req() req: any) {
-    // roadmap saat ini masih berbasis careerId dari query, tapi tetap dikunci untuk siswa.
-    // FE kirim: /siswa/roadmap?careerId=...
-    const careerId = req?.query?.careerId ?? 'default';
-    return this.siswaService.getRoadmap(careerId);
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  importExcel(@Req() req: any, @UploadedFile() file: any, @Body() body: any) {
+    return this.siswaService.importExcel(file, req.user, body);
   }
 }

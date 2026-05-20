@@ -60,8 +60,7 @@ export class SekolahService {
           ? String(data.no_hp_sekolah).trim()
           : null,
         jenis_sekolah: jenisSekolah as 'SMA' | 'SMK',
-        status_verifikasi:
-          data?.status_verifikasi === 'approved' ? 'approved' : 'pending',
+        status_verifikasi: 'pending',
       }),
     );
 
@@ -91,6 +90,6 @@ export class SekolahService {
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
-    return parts.at(-1) ?? '-';
+    return parts.length ? parts[parts.length - 1] : '-';
   }
 }

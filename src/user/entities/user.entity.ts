@@ -1,6 +1,19 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
-export type UserRole = 'superadmin' | 'admin' | 'guru' | 'siswa';
+import { Sekolah } from '../../sekolah/entities/sekolah.entity';
+
+export type UserRole =
+  | 'superadmin'
+  | 'admin'
+  | 'admin_sekolah'
+  | 'guru'
+  | 'siswa';
 
 @Entity('users')
 export class User {
@@ -24,8 +37,19 @@ export class User {
 
   @Column({
     type: 'enum',
-    enum: ['superadmin', 'admin', 'guru', 'siswa'],
+    enum: ['superadmin', 'admin', 'admin_sekolah', 'guru', 'siswa'],
     default: 'siswa',
   })
   role!: UserRole;
+
+  // Dipakai untuk role admin_sekolah agar aksesnya tidak global.
+  @Column({ type: 'int', nullable: true })
+  id_sekolah!: number | null;
+
+  @ManyToOne(() => Sekolah, { nullable: true })
+  @JoinColumn({ name: 'id_sekolah' })
+  sekolah!: Sekolah | null;
+
+  @Column({ type: 'tinyint', default: 0 })
+  must_change_password!: number;
 }

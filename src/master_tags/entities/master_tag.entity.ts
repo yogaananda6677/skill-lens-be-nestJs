@@ -2,7 +2,7 @@ import { Column, Entity, OneToMany, PrimaryGeneratedColumn, Unique } from 'typeo
 
 import { SiswaTag } from '../../siswa_tag/entities/siswa_tag.entity';
 
-export type MasterTagTipe = 'minat' | 'bakat' | 'hobi' | 'pengalaman';
+export type MasterTagTipe = 'minat' | 'bakat' | 'hobi' | 'pengalaman' | 'prestasi';
 
 @Entity('master_tags')
 @Unique(['tipe', 'mapped_key'])

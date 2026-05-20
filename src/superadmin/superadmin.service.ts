@@ -8,18 +8,21 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
-import { User } from '../user/entities/user.entity';
+import { User, UserRole } from '../user/entities/user.entity';
+import { Sekolah } from '../sekolah/entities/sekolah.entity';
 
 @Injectable()
 export class SuperadminService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Sekolah)
+    private readonly sekolahRepo: Repository<Sekolah>,
   ) {}
 
   async getAdmins() {
     const admins = await this.userRepo.find({
-      where: { role: 'admin' },
+      where: [{ role: 'admin' }, { role: 'admin_sekolah' }],
       order: { id_user: 'DESC' },
     });
 
@@ -30,6 +33,7 @@ export class SuperadminService {
       username: admin.username,
       no_hp: admin.no_hp,
       role: admin.role,
+      id_sekolah: admin.id_sekolah,
     }));
   }
 
@@ -43,6 +47,8 @@ export class SuperadminService {
       .toLowerCase();
     const password = String(body?.password ?? '').trim();
     const noHp = body?.no_hp ? String(body.no_hp).trim() : null;
+    const role = (body?.role === 'admin_sekolah' ? 'admin_sekolah' : 'admin') as UserRole;
+    const idSekolah = body?.id_sekolah ? Number(body.id_sekolah) : null;
 
     if (!nama || !email || !username || !password) {
       throw new BadRequestException(
@@ -58,6 +64,19 @@ export class SuperadminService {
       throw new ConflictException('Email atau username sudah digunakan.');
     }
 
+    if (role === 'admin_sekolah') {
+      if (!idSekolah) {
+        throw new BadRequestException('Admin sekolah wajib memiliki id_sekolah.');
+      }
+      const sekolah = await this.sekolahRepo.findOne({ where: { id_sekolah: idSekolah } });
+      if (!sekolah) {
+        throw new NotFoundException('Sekolah untuk admin sekolah tidak ditemukan.');
+      }
+      if (sekolah.status_verifikasi !== 'approved') {
+        throw new BadRequestException('Sekolah harus terverifikasi sebelum dibuatkan admin sekolah.');
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
 
     const admin = this.userRepo.create({
@@ -66,7 +85,8 @@ export class SuperadminService {
       username,
       no_hp: noHp,
       password: hashedPassword,
-      role: 'admin',
+      role,
+      id_sekolah: role === 'admin_sekolah' ? idSekolah : null,
     });
 
     const savedAdmin = await this.userRepo.save(admin);
@@ -80,6 +100,7 @@ export class SuperadminService {
         username: savedAdmin.username,
         no_hp: savedAdmin.no_hp,
         role: savedAdmin.role,
+        id_sekolah: savedAdmin.id_sekolah,
       },
     };
   }
@@ -93,7 +114,7 @@ export class SuperadminService {
       throw new NotFoundException('Admin tidak ditemukan.');
     }
 
-    if (admin.role !== 'admin') {
+    if (!['admin', 'admin_sekolah'].includes(admin.role)) {
       throw new BadRequestException('Akun ini bukan admin.');
     }
 
@@ -140,6 +161,16 @@ export class SuperadminService {
       admin.password = await bcrypt.hash(String(body.password), 12);
     }
 
+    if (admin.role === 'admin_sekolah' && body?.id_sekolah !== undefined) {
+      const idSekolah = Number(body.id_sekolah);
+      if (!idSekolah) {
+        throw new BadRequestException('id_sekolah admin sekolah tidak valid.');
+      }
+      const sekolah = await this.sekolahRepo.findOne({ where: { id_sekolah: idSekolah } });
+      if (!sekolah) throw new NotFoundException('Sekolah tidak ditemukan.');
+      admin.id_sekolah = idSekolah;
+    }
+
     const savedAdmin = await this.userRepo.save(admin);
 
     return {
@@ -151,6 +182,7 @@ export class SuperadminService {
         username: savedAdmin.username,
         no_hp: savedAdmin.no_hp,
         role: savedAdmin.role,
+        id_sekolah: savedAdmin.id_sekolah,
       },
     };
   }
@@ -164,9 +196,9 @@ export class SuperadminService {
       throw new NotFoundException('Admin tidak ditemukan.');
     }
 
-    if (admin.role !== 'admin') {
+    if (!['admin', 'admin_sekolah'].includes(admin.role)) {
       throw new BadRequestException(
-        'Hanya akun admin yang boleh dihapus dari menu ini.',
+        'Hanya akun admin/admin sekolah yang boleh dihapus dari menu ini.',
       );
     }
 

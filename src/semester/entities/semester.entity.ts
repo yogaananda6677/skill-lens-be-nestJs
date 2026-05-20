@@ -7,7 +7,4 @@ export class Semester {
 
   @Column()
   nama_semester!: string;
-
-  @Column()
-  tahun_ajaran!: string;
 }

@@ -1,14 +1,21 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 
 @Injectable()
 export class RoleGuard implements CanActivate {
-  constructor(private roles: string[]) {}
+  constructor(private readonly roles: string[]) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
-
     const user = request.user;
 
-    return this.roles.includes(user.role);
+    if (!user?.role) {
+      throw new ForbiddenException('Token tidak valid atau role tidak ditemukan.');
+    }
+
+    if (!this.roles.includes(user.role)) {
+      throw new ForbiddenException('Role tidak memiliki akses ke endpoint ini.');
+    }
+
+    return true;
   }
 }

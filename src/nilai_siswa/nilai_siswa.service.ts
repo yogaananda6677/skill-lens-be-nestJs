@@ -928,14 +928,13 @@ export class NilaiSiswaService {
     if (cached) return cached;
 
     let semester = await repo.findOne({
-      where: { nama_semester, tahun_ajaran: tahunAjaranUntukSemester },
+      where: { nama_semester },
     });
 
     if (!semester) {
       semester = await repo.save(
         repo.create({
           nama_semester,
-          tahun_ajaran: tahunAjaranUntukSemester,
         }),
       );
     }

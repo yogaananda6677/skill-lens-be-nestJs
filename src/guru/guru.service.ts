@@ -5,13 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { Guru } from './entities/guru.entity';
 import { Siswa } from '../siswa/entities/siswa.entity';
 import { NilaiKategoriSiswa } from '../nilai_siswa/entities/nilai_kategori_siswa.entity';
 import { Sekolah } from '../sekolah/entities/sekolah.entity';
 import { Jurusan } from '../jurusan/entities/jurusan.entity';
+import { GuidanceNote } from './entities/guidance-note.entity';
 
 @Injectable()
 export class GuruService {
@@ -24,6 +25,8 @@ export class GuruService {
     private readonly sekolahRepo: Repository<Sekolah>,
     @InjectRepository(Jurusan)
     private readonly jurusanRepo: Repository<Jurusan>,
+    @InjectRepository(GuidanceNote)
+    private readonly guidanceNoteRepo: Repository<GuidanceNote>,
   ) {}
 
   private async getGuruByUserId(userId: number) {
@@ -348,20 +351,31 @@ export class GuruService {
       order: { id_siswa: 'DESC' },
     });
 
-    const cases = [] as any[];
-    for (const item of siswa) {
-      const nilai = await this.kategoriRepo.find({
-        where: { id_siswa: item.id_siswa },
-      });
+    if (siswa.length === 0) return [];
+
+    const siswaIds = siswa.map((item) => item.id_siswa);
+    const nilaiRows = await this.kategoriRepo.find({
+      where: { id_siswa: In(siswaIds) },
+    });
+
+    const nilaiBySiswa = new Map<number, NilaiKategoriSiswa[]>();
+    for (const row of nilaiRows) {
+      const group = nilaiBySiswa.get(row.id_siswa) ?? [];
+      group.push(row);
+      nilaiBySiswa.set(row.id_siswa, group);
+    }
+
+    return siswa.map((item) => {
+      const nilai = nilaiBySiswa.get(item.id_siswa) ?? [];
       const avg = nilai.length
         ? Math.round(
             nilai.reduce((sum, row) => sum + Number(row.nilai || 0), 0) /
               nilai.length,
           )
         : 0;
-      const priority =
-        avg && avg < 75 ? 'Tinggi' : avg < 85 ? 'Sedang' : 'Normal';
-      cases.push({
+      const priority = avg && avg < 75 ? 'Tinggi' : avg < 85 ? 'Sedang' : 'Normal';
+
+      return {
         id: `g-${item.id_siswa}`,
         studentId: String(item.id_siswa),
         studentName: item.user?.nama ?? item.nisn,
@@ -383,19 +397,15 @@ export class GuruService {
           ? `Rata-rata kategori akademik ${avg}. Validasi rekomendasi dilakukan melalui layanan SPK Python.`
           : 'Data nilai belum lengkap.',
         progress: Math.max(10, Math.min(95, avg || 20)),
-      });
-    }
-
-    return cases;
+      };
+    });
   }
 
   async getSiswaAccounts(userId: number) {
     const guru = await this.getGuruByUserId(userId);
     this.ensureApprovedSchool(guru);
 
-    // Ambil semua siswa milik sekolah aktif guru beserta user (akun).
-    // Password_default tidak tersimpan permanen di tabel user, jadi kita pakai aturan existing:
-    // pada saat import, password_default dibuat dari nisn.
+    // Password tidak ditampilkan ulang. Password sementara hanya muncul sekali saat import akun baru.
     const siswaRows = await this.siswaRepo.find({
       where: { id_sekolah: guru.sekolah!.id_sekolah },
       relations: ['user'],
@@ -408,8 +418,84 @@ export class GuruService {
         nisn: row.nisn,
         nama: row.user?.nama ?? row.nisn,
         username: row.user?.username ?? '',
-        password_default: row.nisn,
+        must_change_password: row.user?.must_change_password === 1,
         akun_baru: false,
       }));
   }
+
+  async listGuidanceNotes(userId: number, idSiswa: number) {
+    const guru = await this.getGuruByUserId(userId);
+    this.ensureApprovedSchool(guru);
+    await this.ensureStudentInGuruSchool(guru, idSiswa);
+
+    const rows = await this.guidanceNoteRepo.find({
+      where: { id_siswa: idSiswa },
+      relations: ['guru', 'guru.user'],
+      order: { id_guidance_note: 'DESC' },
+    });
+
+    return rows.map((row) => ({
+      id_guidance_note: row.id_guidance_note,
+      topic: row.topic,
+      note: row.note,
+      follow_up: row.follow_up,
+      status: row.status,
+      guru: {
+        id_guru: row.guru?.id_guru,
+        nama: row.guru?.user?.nama ?? 'Guru',
+      },
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+  }
+
+  async createGuidanceNote(userId: number, idSiswa: number, body: any) {
+    const guru = await this.getGuruByUserId(userId);
+    this.ensureApprovedSchool(guru);
+    const siswa = await this.ensureStudentInGuruSchool(guru, idSiswa);
+
+    const topic = String(body?.topic ?? body?.topik ?? '').trim();
+    const note = String(body?.note ?? body?.catatan ?? '').trim();
+    const followUp = String(body?.follow_up ?? body?.tindak_lanjut ?? '').trim();
+
+    if (!topic || !note) {
+      throw new BadRequestException('Topik dan catatan bimbingan wajib diisi.');
+    }
+
+    const saved = await this.guidanceNoteRepo.save(
+      this.guidanceNoteRepo.create({
+        id_siswa: siswa.id_siswa,
+        siswa,
+        id_guru: guru.id_guru,
+        guru,
+        topic,
+        note,
+        follow_up: followUp || null,
+        status: body?.status === 'selesai' ? 'selesai' : 'aktif',
+      }),
+    );
+
+    return {
+      message: 'Catatan bimbingan berhasil disimpan.',
+      data: saved,
+    };
+  }
+
+  private async ensureStudentInGuruSchool(guru: Guru, idSiswa: number) {
+    const siswa = await this.siswaRepo.findOne({
+      where: { id_siswa: idSiswa },
+      relations: ['user'],
+    });
+
+    if (!siswa) {
+      throw new NotFoundException('Siswa tidak ditemukan.');
+    }
+
+    if (siswa.id_sekolah !== guru.id_sekolah) {
+      throw new ForbiddenException('Guru hanya boleh mengakses siswa di sekolahnya.');
+    }
+
+    return siswa;
+  }
+
 }

@@ -14,8 +14,6 @@ import { NilaiSiswaController } from './nilai_siswa.controller';
 import { NilaiSiswaService } from './nilai_siswa.service';
 
 @Module({
-  controllers: [NilaiSiswaController],
-  providers: [NilaiSiswaService],
   imports: [
     TypeOrmModule.forFeature([
       NilaiSiswa,
@@ -29,5 +27,8 @@ import { NilaiSiswaService } from './nilai_siswa.service';
       Jurusan,
     ]),
   ],
+  controllers: [NilaiSiswaController],
+  providers: [NilaiSiswaService],
+  exports: [NilaiSiswaService],
 })
 export class NilaiSiswaModule {}

@@ -1,21 +1,117 @@
 -- SkillLens seed-only. Aman untuk dijalankan ulang dari NestJS.
 SET NAMES utf8mb4;
 
-CREATE TABLE metadata (`key` VARCHAR(100) PRIMARY KEY, `value` LONGTEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE alternatives (id INT AUTO_INCREMENT PRIMARY KEY, tujuan_karir VARCHAR(30) NOT NULL, nama VARCHAR(255) NOT NULL, kategori VARCHAR(50) NOT NULL, profil_tag_json JSON NOT NULL, akademik_json JSON NOT NULL, sort_order INT NOT NULL DEFAULT 0, is_active TINYINT NOT NULL DEFAULT 1, UNIQUE KEY uq_alternatives (tujuan_karir, nama), KEY idx_alternatives_tujuan (tujuan_karir, is_active, sort_order), KEY idx_alternatives_kategori (kategori)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE weight_profiles (id INT AUTO_INCREMENT PRIMARY KEY, tujuan_karir VARCHAR(30) NOT NULL, school_group VARCHAR(30) NOT NULL, deskripsi VARCHAR(255), sort_order INT NOT NULL DEFAULT 0, is_active TINYINT NOT NULL DEFAULT 1, UNIQUE KEY uq_weight_profiles (tujuan_karir, school_group)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE criteria_weights (id INT AUTO_INCREMENT PRIMARY KEY, profile_id INT NOT NULL, criterion VARCHAR(50) NOT NULL, weight DOUBLE NOT NULL, UNIQUE KEY uq_criteria_weights (profile_id, criterion), CONSTRAINT fk_criteria_weights_profile FOREIGN KEY (profile_id) REFERENCES weight_profiles(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE source_tag_weights (sumber VARCHAR(30) PRIMARY KEY, weight DOUBLE NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE tag_category_scores (mapped_key VARCHAR(120) PRIMARY KEY, sains DOUBLE NOT NULL, teknologi DOUBLE NOT NULL, sosial DOUBLE NOT NULL, bisnis DOUBLE NOT NULL, kreatif DOUBLE NOT NULL, praktik DOUBLE NOT NULL, agama DOUBLE NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE tag_similarity_groups (id INT AUTO_INCREMENT PRIMARY KEY, group_name VARCHAR(100) NOT NULL, mapped_keys_json JSON NOT NULL, is_active TINYINT NOT NULL DEFAULT 1) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS metadata (`key` VARCHAR(100) PRIMARY KEY, `value` LONGTEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS alternatives (id INT AUTO_INCREMENT PRIMARY KEY, tujuan_karir VARCHAR(30) NOT NULL, nama VARCHAR(255) NOT NULL, kategori VARCHAR(50) NOT NULL, profil_tag_json JSON NOT NULL, akademik_json JSON NOT NULL, sort_order INT NOT NULL DEFAULT 0, is_active TINYINT NOT NULL DEFAULT 1, UNIQUE KEY uq_alternatives (tujuan_karir, nama), KEY idx_alternatives_tujuan (tujuan_karir, is_active, sort_order), KEY idx_alternatives_kategori (kategori)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS weight_profiles (id INT AUTO_INCREMENT PRIMARY KEY, tujuan_karir VARCHAR(30) NOT NULL, school_group VARCHAR(30) NOT NULL, deskripsi VARCHAR(255), sort_order INT NOT NULL DEFAULT 0, is_active TINYINT NOT NULL DEFAULT 1, UNIQUE KEY uq_weight_profiles (tujuan_karir, school_group)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS criteria_weights (id INT AUTO_INCREMENT PRIMARY KEY, profile_id INT NOT NULL, criterion VARCHAR(50) NOT NULL, weight DOUBLE NOT NULL, UNIQUE KEY uq_criteria_weights (profile_id, criterion), CONSTRAINT fk_criteria_weights_profile FOREIGN KEY (profile_id) REFERENCES weight_profiles(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS source_tag_weights (sumber VARCHAR(30) PRIMARY KEY, weight DOUBLE NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS tag_category_scores (mapped_key VARCHAR(120) PRIMARY KEY, sains DOUBLE NOT NULL, teknologi DOUBLE NOT NULL, sosial DOUBLE NOT NULL, bisnis DOUBLE NOT NULL, kreatif DOUBLE NOT NULL, praktik DOUBLE NOT NULL, agama DOUBLE NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS tag_similarity_groups (id INT AUTO_INCREMENT PRIMARY KEY, group_name VARCHAR(100) NOT NULL, mapped_keys_json JSON NOT NULL, is_active TINYINT NOT NULL DEFAULT 1) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS master_tags (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tipe ENUM('minat','bakat','hobi','pengalaman','prestasi') NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  mapped_key VARCHAR(120) NOT NULL,
+  kategori_hint ENUM('sains','teknologi','sosial','bisnis','kreatif','praktik','agama') NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  is_active TINYINT NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_master_tags (tipe, label),
+  KEY idx_master_tags_tipe (tipe, is_active, sort_order),
+  KEY idx_master_tags_mapped_key (mapped_key),
+  KEY idx_master_tags_kategori (kategori_hint)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+
+CREATE TABLE IF NOT EXISTS source_references (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  source_key VARCHAR(80) NOT NULL UNIQUE,
+  judul VARCHAR(255) NOT NULL,
+  penerbit VARCHAR(160) NOT NULL,
+  url VARCHAR(500) NOT NULL,
+  cakupan VARCHAR(255) NOT NULL,
+  catatan TEXT NULL,
+  is_active TINYINT NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS dataset_source_map (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  data_type VARCHAR(50) NOT NULL,
+  source_key VARCHAR(80) NOT NULL,
+  fungsi VARCHAR(255) NOT NULL,
+  is_active TINYINT NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_dataset_source_map (data_type, source_key),
+  CONSTRAINT fk_dataset_source_map_source FOREIGN KEY (source_key) REFERENCES source_references(source_key) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('version', '5.0.0-mysql-only');
-INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('description', 'SkillLens SPK seed MySQL-only: master tag, alternatif, bobot, skor tag, grup tag. Bobot MA ikut umum_ipa/umum_ips.');
-INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('criteria_order', '["numerik", "bahasa", "sains", "sosial", "teknologi", "agama", "kreativitas", "softskill", "minat", "bakat", "hobi", "pengalaman", "tag_match", "kategori_match"]');
+INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('description', 'SkillLens SPK seed MySQL-only: master tag, alternatif, bobot, skor tag, grup tag. Bobot dibedakan untuk kejuruan, umum_ipa, umum_ips, dan umum_bahasa.');
+INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('criteria_order', '["numerik", "bahasa", "sains", "sosial", "teknologi", "agama", "kreativitas", "softskill", "praktik", "minat", "bakat", "hobi", "pengalaman", "prestasi", "tag_match", "kategori_match"]');
 INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('kategori_list', '["sains", "teknologi", "sosial", "bisnis", "kreatif", "praktik", "agama"]');
-INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('school_groups', '["kejuruan", "umum_ipa", "umum_ips"]');
+INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('school_groups', '["kejuruan", "umum_ipa", "umum_ips", "umum_bahasa"]');
 INSERT IGNORE INTO `metadata` (`key`, `value`) VALUES ('runtime', 'mysql-only');
+
+-- Revisi metadata: tambah prestasi dan perbaikan bobot agar total per profil = 1.0
+INSERT INTO `metadata` (`key`, `value`) VALUES
+('version', '5.2.0-school-stream-weights'),
+('description', 'SkillLens SPK seed MySQL-only: master tag minat, bakat, hobi, pengalaman, prestasi; alternatif kuliah/kerja/wirausaha; bobot ternormalisasi per tujuan dan kelompok sekolah; revisi bobot IPA/IPS/Bahasa/Kejuruan dengan sains IPS/Bahasa = 0 dan praktik kejuruan dinaikkan; dilengkapi sumber rujukan.'),
+('criteria_order', '["numerik", "bahasa", "sains", "sosial", "teknologi", "agama", "kreativitas", "softskill", "praktik", "minat", "bakat", "hobi", "pengalaman", "prestasi", "tag_match", "kategori_match"]'),
+('kategori_list', '["sains", "teknologi", "sosial", "bisnis", "kreatif", "praktik", "agama"]'),
+('school_groups', '["kejuruan", "umum_ipa", "umum_ips", "umum_bahasa"]'),
+('runtime', 'mysql-only')
+ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
+
+
+-- Sumber validasi utama untuk master data dan alternatif.
+INSERT INTO `source_references` (`source_key`,`judul`,`penerbit`,`url`,`cakupan`,`catatan`,`is_active`) VALUES
+('onet_online','O*NET OnLine','U.S. Department of Labor / National Center for O*NET Development','https://www.onetonline.org/','Rujukan occupation, skills, abilities, interests, work activities, work styles','Dipakai sebagai dasar kategori bakat/skill, minat kerja, dan profil pekerjaan.',1),
+('onet_database','O*NET Database','U.S. Department of Labor / National Center for O*NET Development','https://www.onetcenter.org/database.html','Dataset O*NET yang dapat diunduh','Dipakai untuk validasi struktur skill, interest, ability, dan work context.',1),
+('esco_download','ESCO Download','European Commission','https://esco.ec.europa.eu/en/use-esco/download','Dataset skills, competences, qualifications, occupations dalam CSV/ODS/RDF/JSON-LD/XML','Dipakai sebagai rujukan klasifikasi skill dan occupation.',1),
+('esco_skills','ESCO Skills and Competences','European Commission','https://esco.ec.europa.eu/en/classification/skill_main','Daftar skills, knowledge, language skills, dan transversal skills','Dipakai sebagai rujukan master data bakat/skill.',1),
+('pddikti','PDDikti','Kementerian Pendidikan Tinggi, Sains, dan Teknologi RI','https://pddikti.kemdiktisaintek.go.id/','Data perguruan tinggi dan program studi Indonesia','Dipakai sebagai rujukan alternatif kuliah/program studi.',1),
+('p5_panduan','Panduan P5','Kemendikbudristek / BSKAP','https://uploads.belajar.id/document/files/Panduan_Pengembangan_Projek_Penguatan_Profil_Pelajar_Pancasila_01j1z0ye6pj383h2y1336ck050.pdf','Panduan pengembangan Projek Penguatan Profil Pelajar Pancasila','Dipakai sebagai rujukan soft skill/karakter dari dimensi P5.',1),
+('kbji_2014','KBJI 2014','Badan Pusat Statistik dan Kementerian Ketenagakerjaan RI','https://ppid.bps.go.id/upload/doc/Klasifikasi_Baku_Jabatan_Indonesia_2014_1659512277.pdf','Klasifikasi Baku Jabatan Indonesia','Dipakai sebagai konteks validasi jabatan/pekerjaan Indonesia.',1),
+('kbli_2020','KBLI 2020','Badan Pusat Statistik RI','https://www.bps.go.id/id/publication/2020/12/23/a5613fd182aaec5ff825af7b/klasifikasi-baku-lapangan-usaha-indonesia-2020.html','Klasifikasi lapangan usaha Indonesia','Dipakai sebagai konteks alternatif wirausaha/bidang usaha.',1)
+ON DUPLICATE KEY UPDATE judul=VALUES(judul), penerbit=VALUES(penerbit), url=VALUES(url), cakupan=VALUES(cakupan), catatan=VALUES(catatan), is_active=VALUES(is_active);
+
+
+-- Sumber tambahan untuk justifikasi pembobotan jalur SMA/SMK.
+INSERT INTO `source_references` (`source_key`,`judul`,`penerbit`,`url`,`cakupan`,`catatan`,`is_active`) VALUES
+('kurikulum_mapel_pilihan_sma','Panduan Pemilihan Mata Pelajaran Pilihan SMA/MA','Kemendikdasmen / Badan Standar, Kurikulum, dan Asesmen Pendidikan','https://kurikulum.kemendikdasmen.go.id/file/1732515135_manage_file.pdf','Mata pelajaran pilihan Fase F kelas XI dan XII SMA/MA','Dipakai sebagai dasar bahwa peminatan dapat diarahkan sesuai minat, bakat, kemampuan, dan rencana lanjut peserta didik.',1),
+('kurikulum_merdeka_smk','Kurikulum Merdeka: Struktur dan Mata Pelajaran SMK/MAK','Kemendikdasmen / Badan Standar, Kurikulum, dan Asesmen Pendidikan','https://kurikulum.kemendikdasmen.go.id/file/1711503412_manage_file.pdf','Struktur dan pilihan pembelajaran SMK/MAK, termasuk pendalaman konsentrasi keahlian','Dipakai sebagai dasar menaikkan bobot praktik/kejuruan untuk kelompok SMK/Kejuruan.',1)
+ON DUPLICATE KEY UPDATE judul=VALUES(judul), penerbit=VALUES(penerbit), url=VALUES(url), cakupan=VALUES(cakupan), catatan=VALUES(catatan), is_active=VALUES(is_active);
+
+-- Pemetaan jenis data SkillLens ke sumber validasi.
+INSERT INTO `dataset_source_map` (`data_type`,`source_key`,`fungsi`,`is_active`) VALUES
+('minat','onet_online','Rujukan minat kerja/RIASEC untuk eksplorasi pekerjaan.',1),
+('minat','onet_database','Validasi struktur interest dan work context.',1),
+('bakat','esco_skills','Rujukan klasifikasi skill/competence.',1),
+('bakat','onet_database','Rujukan skill requirements, abilities, knowledge.',1),
+('hobi','onet_online','Dipakai sebagai jembatan ke interest/work activity, bukan sebagai data siswa langsung.',1),
+('pengalaman','onet_database','Rujukan experience requirements dan work activities.',1),
+('pengalaman','kbji_2014','Konteks jabatan/pekerjaan Indonesia.',1),
+('prestasi','p5_panduan','Rujukan bukti soft skill/karakter dan projek sekolah.',1),
+('prestasi','onet_online','Prestasi dipakai sebagai evidence potensi terhadap pekerjaan/skill.',1),
+('alternatif_kuliah','pddikti','Rujukan resmi data perguruan tinggi dan program studi Indonesia.',1),
+('alternatif_kerja','onet_online','Rujukan profil pekerjaan dan kebutuhan kompetensi.',1),
+('alternatif_kerja','kbji_2014','Rujukan klasifikasi jabatan Indonesia.',1),
+('alternatif_wirausaha','kbli_2020','Rujukan klasifikasi lapangan usaha/bidang usaha Indonesia.',1),
+('softskill_p5','p5_panduan','Rujukan dimensi karakter Profil Pelajar Pancasila.',1)
+ON DUPLICATE KEY UPDATE fungsi=VALUES(fungsi), is_active=VALUES(is_active);
+
+-- Pemetaan sumber untuk justifikasi bobot akademik per kelompok sekolah.
+INSERT INTO `dataset_source_map` (`data_type`,`source_key`,`fungsi`,`is_active`) VALUES
+('bobot_akademik_sma','kurikulum_mapel_pilihan_sma','Dasar pembeda bobot umum_ipa, umum_ips, dan umum_bahasa sesuai pilihan/peminatan mata pelajaran SMA/MA.',1),
+('bobot_akademik_smk','kurikulum_merdeka_smk','Dasar menaikkan bobot praktik/kejuruan pada kelompok SMK/Kejuruan.',1),
+('bobot_softskill_p5','p5_panduan','Dasar penggunaan softskill/P5 sebagai komponen penilaian karakter dan kompetensi non-akademik.',1)
+ON DUPLICATE KEY UPDATE fungsi=VALUES(fungsi), is_active=VALUES(is_active);
+
+
 INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (1,'bakat','Pemrograman / Coding','pemrograman','teknologi',1,1);
 INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (2,'bakat','Troubleshooting Komputer','komputer','teknologi',2,1);
 INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (3,'bakat','Membuat Website / Aplikasi','web','teknologi',3,1);
@@ -550,6 +646,170 @@ INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hin
 INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (532,'pengalaman','Lomba pidato/debat','public speaking','sosial',125,1);
 INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (533,'pengalaman','Lomba tilawah/tahfidz','tahfidz','agama',126,1);
 INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (534,'hobi','Gaming/esport','gaming','teknologi',113,1);
+
+-- Tambahan master tag prestasi agar prestasi menjadi data mandiri dalam SPK.
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (535,'prestasi','Juara olimpiade matematika tingkat sekolah','olimpiade matematika','sains',1,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (536,'prestasi','Juara olimpiade matematika tingkat kabupaten','olimpiade matematika','sains',2,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (537,'prestasi','Finalis olimpiade matematika','olimpiade matematika','sains',3,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (538,'prestasi','Juara olimpiade fisika','olimpiade fisika','sains',4,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (539,'prestasi','Juara olimpiade kimia','olimpiade kimia','sains',5,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (540,'prestasi','Juara olimpiade biologi','olimpiade biologi','sains',6,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (541,'prestasi','Juara olimpiade astronomi','olimpiade astronomi','sains',7,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (542,'prestasi','Juara olimpiade geografi','olimpiade geografi','sains',8,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (543,'prestasi','Juara olimpiade kebumian','olimpiade kebumian','sains',9,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (544,'prestasi','Juara olimpiade ekonomi','olimpiade ekonomi','bisnis',10,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (545,'prestasi','Juara lomba karya ilmiah remaja','karya ilmiah','sains',11,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (546,'prestasi','Finalis karya ilmiah remaja','karya ilmiah','sains',12,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (547,'prestasi','Publikasi artikel ilmiah siswa','artikel ilmiah','sains',13,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (548,'prestasi','Juara lomba penelitian lingkungan','penelitian lingkungan','sains',14,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (549,'prestasi','Juara lomba inovasi sains','inovasi sains','sains',15,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (550,'prestasi','Juara lomba eksperimen IPA','eksperimen ipa','sains',16,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (551,'prestasi','Juara lomba poster ilmiah','poster ilmiah','sains',17,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (552,'prestasi','Juara lomba praktikum laboratorium','laboratorium','sains',18,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (553,'prestasi','Sertifikat asisten laboratorium sekolah','laboratorium','sains',19,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (554,'prestasi','Penghargaan proyek sains terbaik','proyek sains','sains',20,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (555,'prestasi','Juara lomba programming','programming','teknologi',21,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (556,'prestasi','Juara lomba coding','coding','teknologi',22,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (557,'prestasi','Finalis kompetisi pemrograman','programming','teknologi',23,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (558,'prestasi','Juara lomba web design','web design','teknologi',24,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (559,'prestasi','Juara lomba desain aplikasi','aplikasi','teknologi',25,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (560,'prestasi','Juara lomba UI UX','ui ux','kreatif',26,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (561,'prestasi','Juara lomba data science','data science','teknologi',27,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (562,'prestasi','Juara lomba analisis data','analisis data','teknologi',28,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (563,'prestasi','Juara lomba robotika','robotika','teknologi',29,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (564,'prestasi','Juara lomba IoT','iot','teknologi',30,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (565,'prestasi','Juara lomba elektronika','elektronika','teknologi',31,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (566,'prestasi','Juara lomba jaringan komputer','jaringan','teknologi',32,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (567,'prestasi','Juara lomba cybersecurity CTF','cyber security','teknologi',33,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (568,'prestasi','Sertifikat pelatihan komputer','komputer','teknologi',34,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (569,'prestasi','Sertifikat pelatihan coding','coding','teknologi',35,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (570,'prestasi','Sertifikat pelatihan desain digital','desain digital','kreatif',36,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (571,'prestasi','Juara lomba inovasi teknologi tepat guna','teknologi tepat guna','teknologi',37,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (572,'prestasi','Juara lomba game edukasi','game edukasi','teknologi',38,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (573,'prestasi','Juara lomba multimedia interaktif','multimedia','kreatif',39,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (574,'prestasi','Juara lomba animasi digital','animasi','kreatif',40,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (575,'prestasi','Juara lomba debat bahasa Indonesia','debat','sosial',41,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (576,'prestasi','Juara lomba debat bahasa Inggris','debat bahasa inggris','sosial',42,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (577,'prestasi','Juara lomba pidato bahasa Indonesia','pidato','sosial',43,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (578,'prestasi','Juara lomba pidato bahasa Inggris','pidato bahasa inggris','sosial',44,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (579,'prestasi','Juara lomba story telling','story telling','sosial',45,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (580,'prestasi','Juara lomba membaca puisi','puisi','kreatif',46,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (581,'prestasi','Juara lomba cipta puisi','puisi','kreatif',47,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (582,'prestasi','Juara lomba menulis cerpen','cerpen','kreatif',48,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (583,'prestasi','Juara lomba esai','esai','sosial',49,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (584,'prestasi','Juara lomba artikel populer','artikel','sosial',50,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (585,'prestasi','Juara lomba jurnalistik sekolah','jurnalistik','sosial',51,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (586,'prestasi','Juara lomba podcast edukasi','podcast','kreatif',52,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (587,'prestasi','Juara lomba presenter berita','presenter','sosial',53,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (588,'prestasi','Duta literasi sekolah','literasi','sosial',54,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (589,'prestasi','Penghargaan penulis terbaik majalah sekolah','menulis','sosial',55,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (590,'prestasi','Sertifikat tutor sebaya','mengajar','sosial',56,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (591,'prestasi','Sertifikat pelatihan public speaking','public speaking','sosial',57,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (592,'prestasi','Juara lomba cerdas cermat umum','cerdas cermat','sosial',58,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (593,'prestasi','Juara lomba cerdas cermat Pancasila','pancasila','sosial',59,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (594,'prestasi','Juara lomba business plan','business plan','bisnis',60,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (595,'prestasi','Juara lomba kewirausahaan siswa','kewirausahaan','bisnis',61,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (596,'prestasi','Juara lomba bazar sekolah','bazar','bisnis',62,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (597,'prestasi','Penghargaan produk terlaris bazar','jualan','bisnis',63,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (598,'prestasi','Juara lomba marketing plan','marketing','bisnis',64,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (599,'prestasi','Juara lomba simulasi bisnis','simulasi bisnis','bisnis',65,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (600,'prestasi','Juara lomba akuntansi','akuntansi','bisnis',66,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (601,'prestasi','Juara lomba perpajakan','perpajakan','bisnis',67,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (602,'prestasi','Juara lomba ekonomi kreatif','ekonomi kreatif','bisnis',68,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (603,'prestasi','Sertifikat bendahara terbaik','keuangan','bisnis',69,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (604,'prestasi','Penghargaan laporan kas terbaik','keuangan','bisnis',70,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (605,'prestasi','Juara lomba koperasi siswa','koperasi','bisnis',71,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (606,'prestasi','Sertifikat pelatihan kewirausahaan','kewirausahaan','bisnis',72,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (607,'prestasi','Juara lomba inovasi produk UMKM','inovasi produk','bisnis',73,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (608,'prestasi','Penghargaan omzet tertinggi usaha siswa','jualan','bisnis',74,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (609,'prestasi','Juara lomba desain poster','desain poster','kreatif',75,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (610,'prestasi','Juara lomba desain grafis','desain grafis','kreatif',76,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (611,'prestasi','Juara lomba infografis','infografis','kreatif',77,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (612,'prestasi','Juara lomba fotografi','fotografi','kreatif',78,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (613,'prestasi','Juara lomba videografi','videografi','kreatif',79,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (614,'prestasi','Juara lomba film pendek','film pendek','kreatif',80,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (615,'prestasi','Juara lomba editing video','editing video','kreatif',81,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (616,'prestasi','Juara lomba desain logo','desain logo','kreatif',82,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (617,'prestasi','Juara lomba mural','mural','kreatif',83,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (618,'prestasi','Juara lomba lukis','lukis','kreatif',84,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (619,'prestasi','Juara lomba kaligrafi','kaligrafi','agama',85,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (620,'prestasi','Juara lomba kriya','kriya','kreatif',86,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (621,'prestasi','Juara lomba fashion show','fashion','kreatif',87,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (622,'prestasi','Juara lomba desain busana','desain busana','kreatif',88,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (623,'prestasi','Juara lomba tata rias','tata rias','praktik',89,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (624,'prestasi','Juara lomba vokal solo','vokal','kreatif',90,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (625,'prestasi','Juara lomba paduan suara','paduan suara','kreatif',91,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (626,'prestasi','Juara lomba musik band','musik','kreatif',92,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (627,'prestasi','Juara lomba tari tradisional','tari','kreatif',93,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (628,'prestasi','Juara lomba teater','teater','kreatif',94,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (629,'prestasi','Juara lomba monolog','teater','kreatif',95,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (630,'prestasi','Juara lomba futsal','futsal','praktik',96,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (631,'prestasi','Juara lomba sepak bola','sepak bola','praktik',97,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (632,'prestasi','Juara lomba bola voli','voli','praktik',98,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (633,'prestasi','Juara lomba basket','basket','praktik',99,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (634,'prestasi','Juara lomba bulu tangkis','bulu tangkis','praktik',100,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (635,'prestasi','Juara lomba tenis meja','tenis meja','praktik',101,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (636,'prestasi','Juara lomba pencak silat','pencak silat','praktik',102,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (637,'prestasi','Juara lomba karate','karate','praktik',103,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (638,'prestasi','Juara lomba taekwondo','taekwondo','praktik',104,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (639,'prestasi','Juara lomba atletik lari','lari','praktik',105,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (640,'prestasi','Juara lomba renang','renang','praktik',106,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (641,'prestasi','Juara lomba catur','catur','sains',107,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (642,'prestasi','Juara lomba e-sport','esport','teknologi',108,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (643,'prestasi','Anggota paskibra inti','paskibra','praktik',109,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (644,'prestasi','Penghargaan disiplin paskibra','paskibra','praktik',110,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (645,'prestasi','Juara lomba baris berbaris','baris berbaris','praktik',111,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (646,'prestasi','Pramuka garuda','pramuka','praktik',112,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (647,'prestasi','Juara lomba pionering pramuka','pramuka','praktik',113,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (648,'prestasi','Juara lomba pertolongan pertama PMR','pmr','praktik',114,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (649,'prestasi','Sertifikat relawan PMR','pmr','sosial',115,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (650,'prestasi','Sertifikat relawan bencana','relawan','sosial',116,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (651,'prestasi','Penghargaan ketua OSIS berprestasi','kepemimpinan','sosial',117,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (652,'prestasi','Sertifikat pengurus OSIS','organisasi','sosial',118,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (653,'prestasi','Sertifikat pengurus MPK','organisasi','sosial',119,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (654,'prestasi','Sertifikat panitia acara sekolah','kepanitiaan','sosial',120,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (655,'prestasi','Penghargaan panitia terbaik','kepanitiaan','sosial',121,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (656,'prestasi','Penghargaan siswa teladan','siswa teladan','sosial',122,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (657,'prestasi','Penghargaan kehadiran terbaik','disiplin','sosial',123,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (658,'prestasi','Penghargaan karakter P5 terbaik','p5','sosial',124,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (659,'prestasi','Penghargaan gotong royong terbaik','gotong royong','sosial',125,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (660,'prestasi','Penghargaan mandiri terbaik','mandiri','sosial',126,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (661,'prestasi','Penghargaan kreatif terbaik','kreatif','kreatif',127,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (662,'prestasi','Penghargaan bernalar kritis terbaik','bernalar kritis','sains',128,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (663,'prestasi','Penghargaan proyek P5 kewirausahaan','p5 kewirausahaan','bisnis',129,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (664,'prestasi','Penghargaan proyek P5 lingkungan','p5 lingkungan','sains',130,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (665,'prestasi','Penghargaan proyek P5 teknologi','p5 teknologi','teknologi',131,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (666,'prestasi','Penghargaan proyek P5 kearifan lokal','p5 budaya','sosial',132,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (667,'prestasi','Juara lomba MTQ','mtq','agama',133,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (668,'prestasi','Juara lomba tilawah','tilawah','agama',134,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (669,'prestasi','Juara lomba tahfidz','tahfidz','agama',135,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (670,'prestasi','Juara lomba tahsin','tahsin','agama',136,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (671,'prestasi','Juara lomba adzan','adzan','agama',137,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (672,'prestasi','Juara lomba ceramah agama','ceramah','agama',138,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (673,'prestasi','Juara lomba dai muda','dakwah','agama',139,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (674,'prestasi','Juara lomba cerdas cermat agama','cerdas cermat agama','agama',140,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (675,'prestasi','Sertifikat pengurus rohis','rohis','agama',141,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (676,'prestasi','Sertifikat imam shalat sekolah','agama','agama',142,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (677,'prestasi','Sertifikat khatib muda','dakwah','agama',143,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (678,'prestasi','Juara lomba bahasa Arab','bahasa arab','agama',144,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (679,'prestasi','Juara lomba hadis','hadis','agama',145,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (680,'prestasi','Juara lomba fikih','fikih','agama',146,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (681,'prestasi','Juara lomba kaligrafi Arab','kaligrafi','agama',147,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (682,'prestasi','Juara lomba tata boga','tata boga','praktik',148,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (683,'prestasi','Juara lomba memasak','memasak','praktik',149,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (684,'prestasi','Juara lomba kreasi pangan','teknologi pangan','praktik',150,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (685,'prestasi','Juara lomba barista siswa','barista','praktik',151,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (686,'prestasi','Juara lomba otomotif','otomotif','praktik',152,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (687,'prestasi','Juara lomba servis sepeda motor','servis motor','praktik',153,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (688,'prestasi','Juara lomba pengelasan','pengelasan','praktik',154,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (689,'prestasi','Juara lomba instalasi listrik','listrik','praktik',155,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (690,'prestasi','Juara lomba desain bangunan','desain bangunan','praktik',156,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (691,'prestasi','Juara lomba maket arsitektur','arsitektur','kreatif',157,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (692,'prestasi','Juara lomba budidaya tanaman','pertanian','praktik',158,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (693,'prestasi','Juara lomba hidroponik','hidroponik','praktik',159,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (694,'prestasi','Juara lomba budidaya ikan','perikanan','praktik',160,1);
+INSERT IGNORE INTO `master_tags` (`id`,`tipe`,`label`,`mapped_key`,`kategori_hint`,`sort_order`,`is_active`) VALUES (695,'prestasi','Juara lomba peternakan siswa','peternakan','praktik',161,1);
+
 INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil_tag_json`,`akademik_json`,`sort_order`,`is_active`) VALUES (1,'kerja','Programmer / Developer','teknologi','{"aplikasi":90,"coding":100,"komputer":80,"logika":80,"pemrograman":100,"software":90,"web":90}','{"numerik":85,"bahasa":40,"sains":55,"sosial":50,"teknologi":100,"agama":25,"kreativitas":65,"softskill":60}',1,1);
 INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil_tag_json`,`akademik_json`,`sort_order`,`is_active`) VALUES (2,'kerja','IT Support / Networking','teknologi','{"hardware":80,"instalasi":90,"it":90,"jaringan":100,"komputer":90,"networking":100,"servis":80}','{"numerik":65,"bahasa":40,"sains":50,"sosial":35,"teknologi":95,"agama":25,"kreativitas":35,"softskill":70}',2,1);
 INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil_tag_json`,`akademik_json`,`sort_order`,`is_active`) VALUES (3,'kerja','Data Analyst','teknologi','{"analisis":90,"data":100,"database":80,"komputer":90,"matematika":90,"statistika":100}','{"numerik":90,"bahasa":50,"sains":65,"sosial":35,"teknologi":85,"agama":25,"kreativitas":35,"softskill":65}',3,1);
@@ -997,145 +1257,431 @@ INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil
 INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil_tag_json`,`akademik_json`,`sort_order`,`is_active`) VALUES (445,'wirausaha','Media Dakwah Komunitas','agama','{"dakwah":100,"konten":100,"komunikasi":90,"agama":90,"editing":90}','{"numerik":40,"bahasa":80,"sains":30,"sosial":75,"teknologi":40,"agama":95,"kreativitas":75,"softskill":85}',125,1);
 INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil_tag_json`,`akademik_json`,`sort_order`,`is_active`) VALUES (446,'wirausaha','Konsultan Halal UMKM','agama','{"halal":100,"produk halal":100,"food safety":90,"syariah":90,"bisnis":90}','{"numerik":55,"bahasa":80,"sains":30,"sosial":75,"teknologi":40,"agama":90,"kreativitas":55,"softskill":85}',126,1);
 INSERT IGNORE INTO `alternatives` (`id`,`tujuan_karir`,`nama`,`kategori`,`profil_tag_json`,`akademik_json`,`sort_order`,`is_active`) VALUES (447,'wirausaha','Toko Kitab dan Alat Ibadah','agama','{"kitab":100,"agama":100,"jualan":90,"marketplace":90,"manajemen":90}','{"numerik":40,"bahasa":70,"sains":30,"sosial":75,"teknologi":40,"agama":90,"kreativitas":55,"softskill":80}',127,1);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (1,'kuliah','kejuruan','Kuliah - Kejuruan/SMK/Vokasi',1,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'numerik',0.07);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'bahasa',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'sains',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'sosial',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'teknologi',0.1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'agama',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'kreativitas',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'softskill',0.07);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'minat',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'bakat',0.15);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'hobi',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'pengalaman',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'tag_match',0.18);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (1,'kategori_match',0.06);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (2,'kuliah','umum_ipa','Kuliah - Umum IPA/MIPA',2,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'numerik',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'bahasa',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'sains',0.11);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'sosial',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'teknologi',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'agama',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'kreativitas',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'softskill',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'minat',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'bakat',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'hobi',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'pengalaman',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'tag_match',0.18);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (2,'kategori_match',0.06);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (3,'kuliah','umum_ips','Kuliah - Umum IPS/Bahasa/Agama',3,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'numerik',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'bahasa',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'sains',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'sosial',0.11);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'teknologi',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'agama',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'kreativitas',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'softskill',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'minat',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'bakat',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'hobi',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'pengalaman',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'tag_match',0.18);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (3,'kategori_match',0.06);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (4,'kerja','kejuruan','Kerja - Kejuruan/SMK/Vokasi',4,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'numerik',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'bahasa',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'sains',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'sosial',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'teknologi',0.1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'agama',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'kreativitas',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'softskill',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'minat',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'bakat',0.17);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'hobi',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'pengalaman',0.16);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'tag_match',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (4,'kategori_match',0.05);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (5,'kerja','umum_ipa','Kerja - Umum IPA/MIPA',5,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'numerik',0.07);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'bahasa',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'sains',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'sosial',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'teknologi',0.07);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'agama',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'kreativitas',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'softskill',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'minat',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'bakat',0.16);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'hobi',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'pengalaman',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'tag_match',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (5,'kategori_match',0.05);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (6,'kerja','umum_ips','Kerja - Umum IPS/Bahasa/Agama',6,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'numerik',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'bahasa',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'sains',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'sosial',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'teknologi',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'agama',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'kreativitas',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'softskill',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'minat',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'bakat',0.16);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'hobi',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'pengalaman',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'tag_match',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (6,'kategori_match',0.05);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (7,'wirausaha','kejuruan','Wirausaha - Kejuruan/SMK/Vokasi',7,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'numerik',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'bahasa',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'sains',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'sosial',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'teknologi',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'agama',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'kreativitas',0.1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'softskill',0.1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'minat',0.22);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'bakat',0.15);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'hobi',0.07);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'pengalaman',0.15);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'tag_match',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (7,'kategori_match',0.05);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (8,'wirausaha','umum_ipa','Wirausaha - Umum IPA/MIPA',8,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'numerik',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'bahasa',0.05);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'sains',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'sosial',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'teknologi',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'agama',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'kreativitas',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'softskill',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'minat',0.22);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'bakat',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'hobi',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'pengalaman',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'tag_match',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (8,'kategori_match',0.05);
-INSERT IGNORE INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (9,'wirausaha','umum_ips','Wirausaha - Umum IPS/Bahasa/Agama',9,1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'numerik',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'bahasa',0.07);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'sains',0.03);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'sosial',0.08);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'teknologi',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'agama',0.04);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'kreativitas',0.09);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'softskill',0.1);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'minat',0.22);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'bakat',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'hobi',0.06);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'pengalaman',0.14);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'tag_match',0.2);
-INSERT IGNORE INTO `criteria_weights` (`profile_id`,`criterion`,`weight`) VALUES (9,'kategori_match',0.05);
-INSERT IGNORE INTO `source_tag_weights` (`sumber`,`weight`) VALUES ('minat',0.35);
-INSERT IGNORE INTO `source_tag_weights` (`sumber`,`weight`) VALUES ('bakat',0.3);
-INSERT IGNORE INTO `source_tag_weights` (`sumber`,`weight`) VALUES ('hobi',0.15);
-INSERT IGNORE INTO `source_tag_weights` (`sumber`,`weight`) VALUES ('pengalaman',0.2);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (1,'kuliah','kejuruan','Kuliah - Kejuruan/SMK/Vokasi',1,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (2,'kuliah','umum_ipa','Kuliah - Umum IPA/MIPA',2,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (3,'kuliah','umum_ips','Kuliah - Umum IPS',3,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (10,'kuliah','umum_bahasa','Kuliah - Umum Bahasa',10,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (4,'kerja','kejuruan','Kerja - Kejuruan/SMK/Vokasi',4,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (5,'kerja','umum_ipa','Kerja - Umum IPA/MIPA',5,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (6,'kerja','umum_ips','Kerja - Umum IPS',6,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (11,'kerja','umum_bahasa','Kerja - Umum Bahasa',11,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (7,'wirausaha','kejuruan','Wirausaha - Kejuruan/SMK/Vokasi',7,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (8,'wirausaha','umum_ipa','Wirausaha - Umum IPA/MIPA',8,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (9,'wirausaha','umum_ips','Wirausaha - Umum IPS',9,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+INSERT INTO `weight_profiles` (`id`,`tujuan_karir`,`school_group`,`deskripsi`,`sort_order`,`is_active`) VALUES (12,'wirausaha','umum_bahasa','Wirausaha - Umum Bahasa',12,1) ON DUPLICATE KEY UPDATE deskripsi=VALUES(deskripsi), sort_order=VALUES(sort_order), is_active=VALUES(is_active);
+-- Revisi bobot criteria_weights v5.2: total setiap profil = 1.0; IPS/Bahasa tidak memakai sains; SMA Bahasa menonjolkan bahasa; Kejuruan menaikkan praktik.
+DELETE cw FROM `criteria_weights` cw JOIN `weight_profiles` wp ON cw.profile_id = wp.id WHERE wp.tujuan_karir IN ('kuliah','kerja','wirausaha') AND wp.school_group IN ('kejuruan','umum_ipa','umum_ips','umum_bahasa');
+INSERT INTO `criteria_weights` (`profile_id`,`criterion`,`weight`)
+SELECT wp.id, 'numerik', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'sains', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'sosial', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'agama', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'softskill', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'praktik', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'minat', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'bakat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'numerik', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'sains', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'sosial', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'agama', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'softskill', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'praktik', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'minat', 0.13 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'bakat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'numerik', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'sains', 0.00 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'sosial', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'agama', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'softskill', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'praktik', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'minat', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'bakat', 0.11 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.11 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'numerik', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.16 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'sains', 0.00 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'sosial', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'agama', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'softskill', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'praktik', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'minat', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'bakat', 0.11 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'hobi', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kuliah' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'numerik', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'sains', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'sosial', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'agama', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'softskill', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'praktik', 0.18 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'minat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'bakat', 0.13 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'numerik', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'sains', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'sosial', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'agama', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'softskill', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'praktik', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'minat', 0.11 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'bakat', 0.13 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'numerik', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'sains', 0.00 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'sosial', 0.11 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'agama', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'softskill', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'praktik', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'minat', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'bakat', 0.13 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'numerik', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.17 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'sains', 0.00 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'sosial', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'agama', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'softskill', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'praktik', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'minat', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'bakat', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'hobi', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='kerja' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'numerik', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'sains', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'sosial', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'agama', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'softskill', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'praktik', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'minat', 0.12 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'bakat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'hobi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='kejuruan'
+UNION ALL
+SELECT wp.id, 'numerik', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'sains', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'sosial', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'agama', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'softskill', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'praktik', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'minat', 0.13 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'bakat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'hobi', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ipa'
+UNION ALL
+SELECT wp.id, 'numerik', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'sains', 0.00 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'sosial', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'agama', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.07 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'softskill', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'praktik', 0.02 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'minat', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'bakat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'hobi', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_ips'
+UNION ALL
+SELECT wp.id, 'numerik', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'bahasa', 0.15 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'sains', 0.00 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'sosial', 0.06 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'teknologi', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'agama', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'kreativitas', 0.09 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'softskill', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'praktik', 0.01 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'minat', 0.14 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'bakat', 0.10 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'hobi', 0.05 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'pengalaman', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'prestasi', 0.08 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'tag_match', 0.04 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa'
+UNION ALL
+SELECT wp.id, 'kategori_match', 0.03 FROM `weight_profiles` wp WHERE wp.tujuan_karir='wirausaha' AND wp.school_group='umum_bahasa';
+
+-- Tambahan nilai akademik_json.praktik agar kriteria praktik dapat dihitung.
+-- Nilai ini bersifat default berbasis kategori alternatif; dapat disesuaikan lagi di aplikasi bila sekolah memiliki nilai praktik yang lebih rinci.
+UPDATE `alternatives`
+SET `akademik_json` = JSON_SET(
+  `akademik_json`,
+  '$.praktik',
+  CASE
+    WHEN `kategori` = 'praktik' THEN 90
+    WHEN `kategori` = 'teknologi' THEN 60
+    WHEN JSON_EXTRACT(`profil_tag_json`, '$.praktik') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(`profil_tag_json`, '$.praktik')) AS UNSIGNED)
+    WHEN `tujuan_karir` = 'kerja' THEN 50
+    ELSE 35
+  END
+)
+WHERE JSON_EXTRACT(`akademik_json`, '$.praktik') IS NULL;
+
+
+-- Bobot sumber tag untuk matching non-akademik. Total = 1.0
+INSERT INTO `source_tag_weights` (`sumber`, `weight`) VALUES
+('minat',0.30),
+('bakat',0.25),
+('hobi',0.10),
+('pengalaman',0.17),
+('prestasi',0.18)
+ON DUPLICATE KEY UPDATE `weight` = VALUES(`weight`);
+
 INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES ('3d modeling',20.0,50.0,45.0,45.0,90.0,35.0,20.0);
 INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES ('administrasi',90.0,40.0,35.0,20.0,20.0,45.0,20.0);
 INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES ('administrasi bisnis',20.0,35.0,60.0,90.0,35.0,35.0,20.0);
@@ -1551,6 +2097,154 @@ INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosi
 INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES ('wirausaha',20.0,35.0,60.0,90.0,45.0,55.0,20.0);
 INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES ('woodcraft',35,45,20,35,35,90,20);
 INSERT IGNORE INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES ('zakat',20.0,20.0,70.0,55.0,35.0,20.0,90.0);
+
+-- Skor kategori untuk mapped_key prestasi tambahan.
+INSERT INTO `tag_category_scores` (`mapped_key`,`sains`,`teknologi`,`sosial`,`bisnis`,`kreatif`,`praktik`,`agama`) VALUES
+('adzan',20,20,45,20,20,20,100),
+('agama',20,20,45,20,20,20,100),
+('akuntansi',20,20,50,100,20,20,20),
+('analisis data',50,100,20,20,20,20,20),
+('animasi',20,20,20,20,100,55,20),
+('aplikasi',50,100,20,20,20,20,20),
+('arsitektur',20,20,20,20,100,55,20),
+('artikel',20,20,100,50,20,20,20),
+('artikel ilmiah',100,50,20,20,20,20,20),
+('bahasa arab',20,20,45,20,20,20,100),
+('baris berbaris',20,20,20,20,55,100,20),
+('barista',20,20,20,20,55,100,20),
+('basket',20,20,20,20,55,100,20),
+('bazar',20,20,50,100,20,20,20),
+('bernalar kritis',100,50,20,20,20,20,20),
+('bulu tangkis',20,20,20,20,55,100,20),
+('business plan',20,20,50,100,20,20,20),
+('catur',100,50,20,20,20,20,20),
+('ceramah',20,20,45,20,20,20,100),
+('cerdas cermat',20,20,100,50,20,20,20),
+('cerdas cermat agama',20,20,45,20,20,20,100),
+('cerpen',20,20,20,20,100,55,20),
+('coding',50,100,20,20,20,20,20),
+('cyber security',50,100,20,20,20,20,20),
+('dakwah',20,20,45,20,20,20,100),
+('data science',50,100,20,20,20,20,20),
+('debat',20,20,100,50,20,20,20),
+('debat bahasa inggris',20,20,100,50,20,20,20),
+('desain bangunan',20,20,20,20,55,100,20),
+('desain busana',20,20,20,20,100,55,20),
+('desain digital',20,20,20,20,100,55,20),
+('desain grafis',20,20,20,20,100,55,20),
+('desain logo',20,20,20,20,100,55,20),
+('desain poster',20,20,20,20,100,55,20),
+('disiplin',20,20,100,50,20,20,20),
+('editing video',20,20,20,20,100,55,20),
+('ekonomi kreatif',20,20,50,100,20,20,20),
+('eksperimen ipa',100,50,20,20,20,20,20),
+('elektronika',50,100,20,20,20,20,20),
+('esai',20,20,100,50,20,20,20),
+('esport',50,100,20,20,20,20,20),
+('fashion',20,20,20,20,100,55,20),
+('fikih',20,20,45,20,20,20,100),
+('film pendek',20,20,20,20,100,55,20),
+('fotografi',20,20,20,20,100,55,20),
+('futsal',20,20,20,20,55,100,20),
+('game edukasi',50,100,20,20,20,20,20),
+('gotong royong',20,20,100,50,20,20,20),
+('hadis',20,20,45,20,20,20,100),
+('hidroponik',20,20,20,20,55,100,20),
+('infografis',20,20,20,20,100,55,20),
+('inovasi produk',20,20,50,100,20,20,20),
+('inovasi sains',100,50,20,20,20,20,20),
+('iot',50,100,20,20,20,20,20),
+('jaringan',50,100,20,20,20,20,20),
+('jualan',20,20,50,100,20,20,20),
+('jurnalistik',20,20,100,50,20,20,20),
+('kaligrafi',20,20,45,20,20,20,100),
+('karate',20,20,20,20,55,100,20),
+('karya ilmiah',100,50,20,20,20,20,20),
+('kepanitiaan',20,20,100,50,20,20,20),
+('kepemimpinan',20,20,100,50,20,20,20),
+('keuangan',20,20,50,100,20,20,20),
+('kewirausahaan',20,20,50,100,20,20,20),
+('komputer',50,100,20,20,20,20,20),
+('koperasi',20,20,50,100,20,20,20),
+('kreatif',20,20,20,20,100,55,20),
+('kriya',20,20,20,20,100,55,20),
+('laboratorium',100,50,20,20,20,20,20),
+('lari',20,20,20,20,55,100,20),
+('listrik',20,20,20,20,55,100,20),
+('literasi',20,20,100,50,20,20,20),
+('lukis',20,20,20,20,100,55,20),
+('mandiri',20,20,100,50,20,20,20),
+('marketing',20,20,50,100,20,20,20),
+('memasak',20,20,20,20,55,100,20),
+('mengajar',20,20,100,50,20,20,20),
+('menulis',20,20,100,50,20,20,20),
+('mtq',20,20,45,20,20,20,100),
+('multimedia',20,20,20,20,100,55,20),
+('mural',20,20,20,20,100,55,20),
+('musik',20,20,20,20,100,55,20),
+('olimpiade astronomi',100,50,20,20,20,20,20),
+('olimpiade biologi',100,50,20,20,20,20,20),
+('olimpiade ekonomi',20,20,50,100,20,20,20),
+('olimpiade fisika',100,50,20,20,20,20,20),
+('olimpiade geografi',100,50,20,20,20,20,20),
+('olimpiade kebumian',100,50,20,20,20,20,20),
+('olimpiade kimia',100,50,20,20,20,20,20),
+('olimpiade matematika',100,50,20,20,20,20,20),
+('organisasi',20,20,100,50,20,20,20),
+('otomotif',20,20,20,20,55,100,20),
+('p5',20,20,100,50,20,20,20),
+('p5 budaya',20,20,100,50,20,20,20),
+('p5 kewirausahaan',20,20,50,100,20,20,20),
+('p5 lingkungan',100,50,20,20,20,20,20),
+('p5 teknologi',50,100,20,20,20,20,20),
+('paduan suara',20,20,20,20,100,55,20),
+('pancasila',20,20,100,50,20,20,20),
+('paskibra',20,20,20,20,55,100,20),
+('pencak silat',20,20,20,20,55,100,20),
+('penelitian lingkungan',100,50,20,20,20,20,20),
+('pengelasan',20,20,20,20,55,100,20),
+('perikanan',20,20,20,20,55,100,20),
+('perpajakan',20,20,50,100,20,20,20),
+('pertanian',20,20,20,20,55,100,20),
+('peternakan',20,20,20,20,55,100,20),
+('pidato',20,20,100,50,20,20,20),
+('pidato bahasa inggris',20,20,100,50,20,20,20),
+('pmr',20,20,20,20,55,100,20),
+('podcast',20,20,20,20,100,55,20),
+('poster ilmiah',100,50,20,20,20,20,20),
+('pramuka',20,20,20,20,55,100,20),
+('presenter',20,20,100,50,20,20,20),
+('programming',50,100,20,20,20,20,20),
+('proyek sains',100,50,20,20,20,20,20),
+('public speaking',20,20,100,50,20,20,20),
+('puisi',20,20,20,20,100,55,20),
+('relawan',20,20,100,50,20,20,20),
+('renang',20,20,20,20,55,100,20),
+('robotika',50,100,20,20,20,20,20),
+('rohis',20,20,45,20,20,20,100),
+('sepak bola',20,20,20,20,55,100,20),
+('servis motor',20,20,20,20,55,100,20),
+('simulasi bisnis',20,20,50,100,20,20,20),
+('siswa teladan',20,20,100,50,20,20,20),
+('story telling',20,20,100,50,20,20,20),
+('taekwondo',20,20,20,20,55,100,20),
+('tahfidz',20,20,45,20,20,20,100),
+('tahsin',20,20,45,20,20,20,100),
+('tari',20,20,20,20,100,55,20),
+('tata boga',20,20,20,20,55,100,20),
+('tata rias',20,20,20,20,55,100,20),
+('teater',20,20,20,20,100,55,20),
+('teknologi pangan',20,20,20,20,55,100,20),
+('teknologi tepat guna',50,100,20,20,20,20,20),
+('tenis meja',20,20,20,20,55,100,20),
+('tilawah',20,20,45,20,20,20,100),
+('ui ux',20,20,20,20,100,55,20),
+('videografi',20,20,20,20,100,55,20),
+('vokal',20,20,20,20,100,55,20),
+('voli',20,20,20,20,55,100,20),
+('web design',50,100,20,20,20,20,20)
+ON DUPLICATE KEY UPDATE sains=GREATEST(sains,VALUES(sains)), teknologi=GREATEST(teknologi,VALUES(teknologi)), sosial=GREATEST(sosial,VALUES(sosial)), bisnis=GREATEST(bisnis,VALUES(bisnis)), kreatif=GREATEST(kreatif,VALUES(kreatif)), praktik=GREATEST(praktik,VALUES(praktik)), agama=GREATEST(agama,VALUES(agama));
+
 INSERT IGNORE INTO `tag_similarity_groups` (`id`,`group_name`,`mapped_keys_json`,`is_active`) VALUES (1,'group_01','["aplikasi","coding","database","gaming","it","komputer","logika","pemrograman","software","web"]',1);
 INSERT IGNORE INTO `tag_similarity_groups` (`id`,`group_name`,`mapped_keys_json`,`is_active`) VALUES (2,'group_02','["ai","analisis","data","machine learning","matematika","riset","statistika"]',1);
 INSERT IGNORE INTO `tag_similarity_groups` (`id`,`group_name`,`mapped_keys_json`,`is_active`) VALUES (3,'group_03','["cloud","cyber security","instalasi","it","jaringan","keamanan siber","komputer","networking"]',1);
