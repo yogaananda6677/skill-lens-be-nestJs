@@ -21,6 +21,145 @@ type ProfileTagPayload = Partial<
   Record<Exclude<MasterTagTipe, 'prestasi'>, string[]>
 >;
 
+const TAG_ALIAS_EXACT: Record<string, string> = {
+  'ui ux design': 'ui ux',
+  'ui ux designer': 'ui ux',
+  'desain ui': 'ui ux',
+  'desain ux': 'ui ux',
+  'ui engineering': 'frontend',
+  figma: 'ui ux',
+  wireframe: 'ui ux',
+  prototyping: 'ui ux',
+  'desain grafis': 'desain',
+  'desain poster': 'desain',
+  'desain presentasi': 'desain',
+  'komunikasi visual': 'desain',
+  'desain komunikasi visual': 'desain',
+  dkv: 'desain',
+  'ilustrasi digital': 'ilustrasi',
+  'motion graphics': 'motion graphic',
+  'editing video': 'editing',
+  'membuat desain figma': 'ui ux',
+  'pengembangan web': 'web',
+  'membuat website': 'web',
+  website: 'web',
+  'pengembangan mobile': 'mobile',
+  'membuat aplikasi kecil': 'aplikasi',
+  'kecerdasan buatan': 'machine learning',
+  'analisis data': 'data',
+  'database design': 'database',
+  'keamanan siber': 'cyber security',
+  'internet of things': 'iot',
+  'cloud computing': 'cloud',
+  'devops dasar': 'devops',
+  'quality assurance': 'qa testing',
+  'hukum dasar': 'hukum',
+  'dokumentasi hukum': 'hukum',
+  'ilmu hukum': 'hukum',
+  'kebijakan publik': 'politik',
+  'public speaking': 'public speaking',
+  'latihan debat': 'debat',
+  'copywriting kreatif': 'copywriting',
+  'social media marketing': 'marketing',
+  'pemasaran digital': 'marketing',
+  'e commerce': 'ecommerce',
+  'e-commerce': 'ecommerce',
+  kewirausahaan: 'wirausaha',
+  'bisnis digital': 'bisnis',
+  'keuangan pribadi': 'keuangan',
+  'manajemen event': 'event',
+  'layanan pelanggan': 'customer relation',
+  'administrasi perkantoran': 'administrasi perkantoran',
+  'matematika terapan': 'matematika',
+  'fisika terapan': 'fisika',
+  'kimia terapan': 'kimia',
+  'laboratorium sains': 'laboratorium',
+  'pangan dan gizi': 'gizi',
+  'kesehatan masyarakat': 'kesehatan masyarakat',
+  'konseling teman sebaya': 'konseling',
+  'pelayanan sosial': 'sosial',
+  'pendidikan anak': 'pendidikan',
+  'relawan komunitas': 'relawan',
+  'komunikasi kesehatan': 'komunikasi',
+  'mengajar teman': 'mengajar',
+  'membuat modul belajar': 'materi ajar',
+  'pelatihan komputer': 'komputer',
+  'media pembelajaran': 'teknologi pendidikan',
+  'bimbingan karier': 'konseling',
+};
+
+const TAG_ALIAS_CONTAINS: Array<[string[], string]> = [
+  [['ui', 'ux'], 'ui ux'],
+  [['desain', 'ui'], 'ui ux'],
+  [['desain', 'ux'], 'ui ux'],
+  [['figma'], 'ui ux'],
+  [['wireframe'], 'ui ux'],
+  [['prototype'], 'ui ux'],
+  [['desain', 'grafis'], 'desain'],
+  [['desain', 'poster'], 'desain'],
+  [['komunikasi', 'visual'], 'desain'],
+  [['ilustrasi'], 'ilustrasi'],
+  [['motion', 'graphic'], 'motion graphic'],
+  [['editing', 'video'], 'editing'],
+  [['pengembangan', 'web'], 'web'],
+  [['membuat', 'website'], 'web'],
+  [['web', 'developer'], 'web'],
+  [['mobile'], 'mobile'],
+  [['coding'], 'coding'],
+  [['pemrograman'], 'pemrograman'],
+  [['database'], 'database'],
+  [['hukum'], 'hukum'],
+  [['legal'], 'hukum'],
+  [['public', 'speaking'], 'public speaking'],
+  [['debat'], 'debat'],
+];
+
+function canonicalTagKey(value: unknown): string {
+  const normalized = normalizeKey(value);
+  if (!normalized) return '';
+  if (TAG_ALIAS_EXACT[normalized]) return TAG_ALIAS_EXACT[normalized];
+  const containsAlias = TAG_ALIAS_CONTAINS.find(([keywords]) =>
+    keywords.every((keyword) => normalized.includes(keyword)),
+  );
+  return containsAlias?.[1] ?? normalized;
+}
+
+function inferKategoriHint(mappedKey: string): string | null {
+  const key = normalizeKey(mappedKey);
+  if ([
+    'desain', 'ui ux', 'ilustrasi', 'menggambar', 'editing', 'fotografi',
+    'videografi', 'animasi', 'branding', 'kreatif', 'motion graphic',
+    'desain produk', 'multimedia',
+  ].includes(key)) return 'kreatif';
+  if ([
+    'pemrograman', 'coding', 'web', 'aplikasi', 'mobile', 'database',
+    'frontend', 'backend', 'komputer', 'software', 'machine learning',
+    'cyber security', 'iot', 'cloud', 'qa testing',
+  ].includes(key)) return 'teknologi';
+  if ([
+    'hukum', 'debat', 'public speaking', 'politik', 'administrasi publik',
+    'komunikasi', 'psikologi', 'sosial', 'jurnalistik',
+  ].includes(key)) return 'sosial';
+  if ([
+    'bisnis', 'wirausaha', 'marketing', 'akuntansi', 'keuangan', 'jualan',
+    'manajemen', 'ecommerce', 'marketplace',
+  ].includes(key)) return 'bisnis';
+  if ([
+    'matematika', 'biologi', 'kimia', 'fisika', 'riset', 'kesehatan',
+    'laboratorium', 'farmasi', 'gizi',
+  ].includes(key)) return 'sains';
+  if ([
+    'otomotif', 'mekanik', 'masak', 'barista', 'menjahit', 'hospitality',
+    'berkebun', 'peternakan', 'praktik',
+  ].includes(key)) return 'praktik';
+  if ([
+    'agama', 'dakwah', 'tahfidz', 'mengaji', 'pai', 'syariah', 'fikih',
+    'zakat', 'wakaf',
+  ].includes(key)) return 'agama';
+  return null;
+}
+
+
 @Injectable()
 export class SiswaProfileService {
   constructor(
@@ -83,7 +222,7 @@ export class SiswaProfileService {
     const tagByKategori = (kategori: MasterTagTipe) =>
       tags
         .filter((item) => item.masterTag?.tipe === kategori)
-        .map((item) => item.masterTag?.label || item.masterTag?.mapped_key)
+        .map((item) => item.masterTag?.mapped_key || item.masterTag?.label)
         .filter(Boolean);
 
     const prestasi = prestasiRows.map((item) => ({
@@ -232,14 +371,26 @@ export class SiswaProfileService {
         [Exclude<MasterTagTipe, 'prestasi'>, string[]]
       >) {
         for (const namaTag of uniqueClean(values)) {
-          const mappedKey = normalizeKey(namaTag).replace(/\s+/g, '_');
+          const inputKey = normalizeKey(namaTag);
+          const mappedKey = canonicalTagKey(namaTag);
+          if (!mappedKey) continue;
 
-          let masterTag = await manager.findOne(MasterTag, {
+          const candidates = await manager.find(MasterTag, {
             where: {
-              mapped_key: mappedKey,
               tipe: kategori,
               is_active: 1,
             },
+          });
+
+          let masterTag = candidates.find((item) => {
+            const itemMappedKey = normalizeKey(item.mapped_key);
+            const itemLabelKey = normalizeKey(item.label);
+            return (
+              itemMappedKey === mappedKey ||
+              itemMappedKey === inputKey ||
+              itemLabelKey === mappedKey ||
+              itemLabelKey === inputKey
+            );
           });
 
           if (!masterTag) {
@@ -249,7 +400,7 @@ export class SiswaProfileService {
                 label: namaTag,
                 mapped_key: mappedKey,
                 tipe: kategori,
-                kategori_hint: null,
+                kategori_hint: inferKategoriHint(mappedKey),
                 sort_order: 0,
                 is_active: 1,
               }),
