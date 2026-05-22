@@ -2,26 +2,42 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { MasterTag, MasterTagTipe } from '../../master_tags/entities/master_tag.entity';
+import {
+  MasterTag,
+  MasterTagTipe,
+} from '../../master_tags/entities/master_tag.entity';
 import { NilaiKategoriSiswa } from '../../nilai_siswa/entities/nilai_kategori_siswa.entity';
 import { ProfileSiswa } from '../../profile_siswa/entities/profile_siswa.entity';
 import { SiswaTag } from '../../siswa_tag/entities/siswa_tag.entity';
+import { PrestasiSiswa } from '../../prestasi_siswa/entities/prestasi_siswa.entity';
 import { Siswa } from '../entities/siswa.entity';
-import { normalizeKey, toStringArray, uniqueClean } from '../utils/student-normalizer';
+import {
+  normalizeKey,
+  toStringArray,
+  uniqueClean,
+} from '../utils/student-normalizer';
 
-type ProfileTagPayload = Record<MasterTagTipe, string[]>;
+type ProfileTagPayload = Partial<
+  Record<Exclude<MasterTagTipe, 'prestasi'>, string[]>
+>;
 
 @Injectable()
 export class SiswaProfileService {
   constructor(
     @InjectRepository(Siswa)
     private readonly siswaRepo: Repository<Siswa>,
+
     @InjectRepository(ProfileSiswa)
     private readonly profileRepo: Repository<ProfileSiswa>,
+
     @InjectRepository(NilaiKategoriSiswa)
     private readonly kategoriRepo: Repository<NilaiKategoriSiswa>,
+
     @InjectRepository(SiswaTag)
     private readonly siswaTagRepo: Repository<SiswaTag>,
+
+    @InjectRepository(PrestasiSiswa)
+    private readonly prestasiRepo: Repository<PrestasiSiswa>,
   ) {}
 
   async getMe(userId: number) {
@@ -31,9 +47,22 @@ export class SiswaProfileService {
       'jurusan_detail',
     ]);
 
-    const [profile, nilaiKategori] = await Promise.all([
-      this.profileRepo.findOne({ where: { id_siswa: siswa.id_siswa } }),
-      this.kategoriRepo.find({ where: { id_siswa: siswa.id_siswa } }),
+    const [profile, nilaiKategori, prestasiRows] = await Promise.all([
+      this.profileRepo.findOne({
+        where: { id_siswa: siswa.id_siswa },
+      }),
+
+      this.kategoriRepo.find({
+        where: { id_siswa: siswa.id_siswa },
+      }),
+
+      this.prestasiRepo.find({
+        where: { id_siswa: siswa.id_siswa },
+        order: {
+          tahun: 'DESC',
+          id_prestasi: 'DESC',
+        } as any,
+      }),
     ]);
 
     const nilaiAkademik = nilaiKategori.reduce(
@@ -54,7 +83,34 @@ export class SiswaProfileService {
     const tagByKategori = (kategori: MasterTagTipe) =>
       tags
         .filter((item) => item.masterTag?.tipe === kategori)
-        .map((item) => item.masterTag.mapped_key);
+        .map((item) => item.masterTag?.label || item.masterTag?.mapped_key)
+        .filter(Boolean);
+
+    const prestasi = prestasiRows.map((item) => ({
+      id: item.id_prestasi,
+      id_prestasi: item.id_prestasi,
+      nama_prestasi: item.nama_prestasi,
+      tahun: item.tahun,
+      tingkat: item.tingkat,
+      penyelenggara: item.penyelenggara,
+      keterangan: item.keterangan,
+      bukti_url: item.bukti_url,
+    }));
+
+    /**
+     * Ini khusus untuk kebutuhan SPK.
+     * SPK cukup menerima prestasi dalam bentuk ringkasan string.
+     */
+    const prestasiSpk = prestasiRows.map((item) =>
+      [
+        item.nama_prestasi,
+        item.tingkat,
+        item.tahun,
+        item.penyelenggara,
+      ]
+        .filter(Boolean)
+        .join(' - '),
+    );
 
     return {
       id_siswa: siswa.id_siswa,
@@ -64,6 +120,7 @@ export class SiswaProfileService {
       kelas: siswa.kelas,
       jurusan: siswa.jurusan_detail?.nama_jurusan ?? siswa.jurusan,
       id_jurusan: siswa.id_jurusan,
+
       sekolah: siswa.sekolah
         ? {
             id: siswa.sekolah.id_sekolah,
@@ -72,12 +129,20 @@ export class SiswaProfileService {
             jenis_sekolah: siswa.sekolah.jenis_sekolah,
           }
         : null,
+
       minat: tagByKategori('minat'),
       hobi: tagByKategori('hobi'),
       bakat: tagByKategori('bakat'),
       pengalaman: tagByKategori('pengalaman'),
-      prestasi: tagByKategori('prestasi'),
-      prestasi_text: profile?.prestasi ?? '',
+
+      /**
+       * Prestasi sekarang dari tabel prestasi_siswa,
+       * bukan dari siswa_tag/master_tag.
+       */
+      prestasi,
+      prestasi_spk: prestasiSpk,
+      prestasi_text: prestasiSpk.join(', '),
+
       tujuan: profile?.tujuan_karir ?? '',
       nilai_akademik: nilaiAkademik,
     };
@@ -97,9 +162,31 @@ export class SiswaProfileService {
       });
     }
 
-    const prestasi = toStringArray(body?.prestasi);
-    profile.prestasi =
-      prestasi.join(', ') || String(body?.prestasi_text ?? '').trim() || null;
+    /**
+     * Prestasi tidak diambil dari body lagi.
+     * Prestasi punya tabel sendiri.
+     */
+    const prestasiRows = await this.prestasiRepo.find({
+      where: { id_siswa: siswa.id_siswa },
+      order: {
+        tahun: 'DESC',
+        id_prestasi: 'DESC',
+      } as any,
+    });
+
+    const prestasiText = prestasiRows
+      .map((item) =>
+        [item.nama_prestasi, item.tingkat, item.tahun]
+          .filter(Boolean)
+          .join(' - '),
+      )
+      .join(', ');
+
+    /**
+     * Kalau kolom profile.prestasi masih ada, isi hanya untuk backward compatibility.
+     * Sumber data utama tetap tabel prestasi_siswa.
+     */
+
     profile.tujuan_karir =
       String(body?.tujuan_karir ?? body?.tujuan ?? '').trim() || null;
 
@@ -110,7 +197,6 @@ export class SiswaProfileService {
       hobi: toStringArray(body?.hobi),
       bakat: toStringArray(body?.bakat),
       pengalaman: toStringArray(body?.pengalaman),
-      prestasi,
     });
 
     return {
@@ -142,12 +228,12 @@ export class SiswaProfileService {
     await this.siswaTagRepo.manager.transaction(async (manager) => {
       await manager.delete(SiswaTag, { id_profile_siswa: idProfileSiswa });
 
-      for (const [kategori, values] of Object.entries(tagsByKategori) as Array<[
-        MasterTagTipe,
-        string[],
-      ]>) {
+      for (const [kategori, values] of Object.entries(tagsByKategori) as Array<
+        [Exclude<MasterTagTipe, 'prestasi'>, string[]]
+      >) {
         for (const namaTag of uniqueClean(values)) {
           const mappedKey = normalizeKey(namaTag).replace(/\s+/g, '_');
+
           let masterTag = await manager.findOne(MasterTag, {
             where: {
               mapped_key: mappedKey,

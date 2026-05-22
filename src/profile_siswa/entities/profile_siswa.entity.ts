@@ -25,8 +25,6 @@ export class ProfileSiswa {
   @Column({ type: 'text', nullable: true })
   tujuan_karir!: string | null;
 
-  @Column({ type: 'text', nullable: true })
-  prestasi!: string | null;
 
   @OneToMany(() => SiswaTag, (siswaTag) => siswaTag.profileSiswa)
   siswaTags!: SiswaTag[];

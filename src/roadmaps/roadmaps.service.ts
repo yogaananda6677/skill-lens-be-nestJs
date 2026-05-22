@@ -83,6 +83,11 @@ export class RoadmapsService {
     });
 
     if (!studentRoadmap) {
+      await this.studentRoadmapRepo.update(
+        { id_siswa: siswa.id_siswa, status: 'aktif' } as any,
+        { status: 'dibatalkan', completed_at: new Date() } as any,
+      );
+
       studentRoadmap = await this.studentRoadmapRepo.save(
         this.studentRoadmapRepo.create({
           id_siswa: siswa.id_siswa,
@@ -320,10 +325,12 @@ export class RoadmapsService {
       steps: roadmap.steps
         .filter((step) => step.is_active === 1)
         .sort((a, b) => a.step_order - b.step_order)
-        .map((step) => ({
+        .map((step) => {
+          const enhancedStep = this.enhanceRoadmapStep(roadmap, step);
+          return {
           id_roadmap_step: step.id_roadmap_step,
-          title: step.title,
-          description: step.description,
+          title: enhancedStep.title,
+          description: enhancedStep.description,
           step_order: step.step_order,
           estimated_duration: step.estimated_duration,
           output_target: step.output_target,
@@ -333,10 +340,11 @@ export class RoadmapsService {
             .sort((a, b) => a.detail_order - b.detail_order)
             .map((detail) => {
               const progress = progressByDetail.get(detail.id_roadmap_step_detail);
+              const enhancedDetail = this.enhanceRoadmapDetail(roadmap, step, detail);
               return {
                 id_roadmap_step_detail: detail.id_roadmap_step_detail,
-                title: detail.title,
-                description: detail.description,
+                title: enhancedDetail.title,
+                description: enhancedDetail.description,
                 reference_link: detail.reference_link,
                 reference_type: detail.reference_type,
                 detail_order: detail.detail_order,
@@ -350,7 +358,8 @@ export class RoadmapsService {
                   : null,
               };
             }),
-        })),
+        };
+        }),
     };
   }
 
@@ -368,6 +377,189 @@ export class RoadmapsService {
     await this.studentRoadmapRepo.save(roadmap);
   }
 
+
+
+  private normalizeText(value?: string | null) {
+    return String(value ?? '').toLowerCase();
+  }
+
+  private getRoadmapFocus(roadmap: RoadmapMaster) {
+    const target = roadmap.recommended_for || roadmap.title.replace(/^Roadmap\s+/i, '') || 'bidang pilihan';
+    const text = this.normalizeText(`${roadmap.title} ${roadmap.recommended_for} ${roadmap.category}`);
+
+    if (/programmer|developer|informatika|rekayasa perangkat|sistem informasi|rpl/.test(text)) {
+      return {
+        target,
+        tools: 'HTML, CSS, JavaScript/TypeScript, Git, database, dan dasar backend',
+        project: 'aplikasi CRUD sederhana dengan autentikasi, validasi form, dan database',
+        portfolio: 'repository GitHub, screenshot fitur, dokumentasi cara menjalankan, dan catatan bug yang sudah diperbaiki',
+        validation: 'code review dari guru/teman dan demo aplikasi 5 menit',
+      };
+    }
+    if (/data|statistika|analis/.test(text)) {
+      return {
+        target,
+        tools: 'Excel/Spreadsheet, SQL dasar, Python Pandas, visualisasi data, dan interpretasi grafik',
+        project: 'analisis dataset kecil berisi pembersihan data, ringkasan statistik, grafik, dan insight rekomendasi',
+        portfolio: 'notebook analisis, dashboard sederhana, file data bersih, dan narasi insight',
+        validation: 'presentasi insight 3 temuan utama kepada guru/teman',
+      };
+    }
+    if (/cyber|security|keamanan/.test(text)) {
+      return {
+        target,
+        tools: 'dasar jaringan, Linux, keamanan akun, OWASP dasar, dan praktik lab legal',
+        project: 'checklist hardening akun/perangkat dan simulasi keamanan web di lab lokal',
+        portfolio: 'laporan temuan, bukti konfigurasi aman, dan catatan mitigasi risiko',
+        validation: 'review etika, legalitas, dan hasil mitigasi bersama guru',
+      };
+    }
+    if (/ui|ux|dkv|desain|grafis/.test(text)) {
+      return {
+        target,
+        tools: 'riset pengguna, wireframe, Figma/Canva, prinsip warna, tipografi, dan usability testing',
+        project: 'prototype 3-5 layar untuk masalah nyata di sekolah/UMKM',
+        portfolio: 'case study berisi masalah, persona, wireframe, prototype, dan hasil feedback',
+        validation: 'uji coba prototype ke minimal 3 pengguna dan catat perbaikannya',
+      };
+    }
+    if (/digital marketing|marketing|konten|social media/.test(text)) {
+      return {
+        target,
+        tools: 'riset audiens, content pillar, copywriting, desain konten, kalender posting, dan metrik engagement',
+        project: 'kampanye konten 7 hari untuk produk/komunitas kecil',
+        portfolio: 'kalender konten, contoh desain/caption, hasil metrik, dan evaluasi kampanye',
+        validation: 'bandingkan metrik sebelum-sesudah dan minta feedback target audiens',
+      };
+    }
+    if (/akuntansi|keuangan|kasir|perbankan|pajak/.test(text)) {
+      return {
+        target,
+        tools: 'pencatatan transaksi, spreadsheet, laporan kas sederhana, rekonsiliasi, dan etika keuangan',
+        project: 'simulasi laporan keuangan sederhana untuk usaha kecil',
+        portfolio: 'file spreadsheet, laporan ringkas, bukti rumus, dan analisis kesalahan pencatatan',
+        validation: 'cek ulang saldo awal-akhir dan review akurasi laporan',
+      };
+    }
+    if (/farmasi|apoteker|lab|biologi|kimia|kedokteran|keperawatan|gizi|kesehatan/.test(text)) {
+      return {
+        target,
+        tools: 'literasi sains, keselamatan kerja, observasi, pencatatan data, dan komunikasi kesehatan',
+        project: 'studi kasus sederhana berbasis literatur/observasi yang aman dan sesuai etika',
+        portfolio: 'ringkasan literatur, tabel observasi, kesimpulan, dan refleksi etika',
+        validation: 'diskusi hasil dengan guru mapel/guru BK untuk memastikan akurasi',
+      };
+    }
+    if (/otomotif|listrik|elektronik|mekanik|produksi|gudang|logistik|chef|masak/.test(text)) {
+      return {
+        target,
+        tools: 'SOP kerja, alat praktik, keselamatan kerja, troubleshooting, dan dokumentasi proses',
+        project: 'praktik mini sesuai bidang dengan checklist K3 dan hasil akhir yang bisa diperiksa',
+        portfolio: 'foto proses, checklist alat-bahan, catatan masalah, dan hasil evaluasi praktik',
+        validation: 'minta penilaian guru produktif menggunakan rubrik praktik',
+      };
+    }
+    if (/guru|tutor|konselor|psikologi|bk|humas|komunikasi|jurnalistik|hukum|sosiologi/.test(text)) {
+      return {
+        target,
+        tools: 'komunikasi, observasi sosial, penulisan laporan, empati, public speaking, dan etika profesi',
+        project: 'simulasi layanan/presentasi/wawancara sederhana sesuai bidang',
+        portfolio: 'naskah, rekaman/presentasi, catatan feedback, dan refleksi pengembangan diri',
+        validation: 'minta feedback dari guru/teman tentang kejelasan komunikasi dan sikap profesional',
+      };
+    }
+
+    return {
+      target,
+      tools: 'konsep dasar bidang, tools pendukung, latihan terarah, dan refleksi belajar',
+      project: `proyek mini yang relevan dengan ${target}`,
+      portfolio: 'bukti latihan, dokumentasi proses, dan evaluasi hasil',
+      validation: 'feedback dari guru/teman serta rencana perbaikan berikutnya',
+    };
+  }
+
+  private enhanceRoadmapStep(roadmap: RoadmapMaster, step: RoadmapStep) {
+    const focus = this.getRoadmapFocus(roadmap);
+    const templates: Record<number, { title: string; description: string }> = {
+      1: {
+        title: `Kenali target ${focus.target}`,
+        description: `Pahami tugas nyata, peluang, risiko, dan kompetensi awal yang dibutuhkan untuk masuk ke bidang ${focus.target}.`,
+      },
+      2: {
+        title: `Kuasai fondasi ${focus.target}`,
+        description: `Fokus pada ${focus.tools} agar dasar belajarmu sesuai dengan kebutuhan ${focus.target}.`,
+      },
+      3: {
+        title: `Buat proyek mini ${focus.target}`,
+        description: `Kerjakan ${focus.project} supaya kemampuanmu terlihat dari hasil nyata, bukan hanya teori.`,
+      },
+      4: {
+        title: `Bangun portofolio ${focus.target}`,
+        description: `Kumpulkan ${focus.portfolio} sebagai bukti perkembangan yang bisa ditunjukkan ke guru, kampus, tempat kerja, atau calon pelanggan.`,
+      },
+      5: {
+        title: `Evaluasi kesiapan ${focus.target}`,
+        description: `Ukur progres, minta masukan, lalu buat target lanjutan yang lebih spesifik untuk ${focus.target}.`,
+      },
+    };
+
+    return templates[step.step_order] ?? { title: step.title, description: step.description };
+  }
+
+  private enhanceRoadmapDetail(roadmap: RoadmapMaster, step: RoadmapStep, detail: RoadmapStepDetail) {
+    const focus = this.getRoadmapFocus(roadmap);
+    const odd = detail.detail_order === 1;
+    const templates: Record<number, { title: string; description: string }> = {
+      1: odd
+        ? {
+            title: `Riset aktivitas nyata ${focus.target}`,
+            description: `Cari 3 contoh aktivitas nyata ${focus.target}, lalu tuliskan tugas harian, tools yang dipakai, dan masalah yang sering diselesaikan.`,
+          }
+        : {
+            title: `Petakan 5 kompetensi ${focus.target}`,
+            description: `Buat daftar 5 kompetensi utama ${focus.target}, beri tanda mana yang sudah kamu kuasai dan mana yang perlu dipelajari dulu.`,
+          },
+      2: odd
+        ? {
+            title: `Pelajari fondasi utama`,
+            description: `Belajar bertahap tentang ${focus.tools}. Catat istilah penting dan contoh penggunaannya dalam bidang ${focus.target}.`,
+          }
+        : {
+            title: `Buat rangkuman dan latihan pendek`,
+            description: `Buat rangkuman 1 halaman dan selesaikan latihan kecil yang membuktikan kamu memahami fondasi ${focus.target}.`,
+          },
+      3: odd
+        ? {
+            title: `Kerjakan proyek mini`,
+            description: `Buat ${focus.project}. Mulai dari versi sederhana, lalu dokumentasikan langkah, kendala, dan hasil akhirnya.`,
+          }
+        : {
+            title: `Minta umpan balik proyek`,
+            description: `${focus.validation}. Catat minimal 3 masukan dan tentukan perbaikan yang akan dilakukan.`,
+          },
+      4: odd
+        ? {
+            title: `Susun bukti portofolio`,
+            description: `Kumpulkan ${focus.portfolio}. Pastikan setiap bukti punya judul, tanggal, tujuan, dan hasil yang jelas.`,
+          }
+        : {
+            title: `Tulis cerita proses`,
+            description: `Jelaskan masalah, langkah pengerjaan, tools, hasil, dan hal yang kamu pelajari dari proyek ${focus.target}.`,
+          },
+      5: odd
+        ? {
+            title: `Evaluasi progres 30 hari`,
+            description: `Bandingkan kemampuan awal dan kemampuan sekarang pada bidang ${focus.target}. Tandai kemampuan yang sudah naik dan yang masih lemah.`,
+          }
+        : {
+            title: `Susun target lanjutan`,
+            description: `Tentukan target 30 hari berikutnya yang spesifik, misalnya proyek lanjutan, sertifikasi, latihan wawancara, atau konsultasi guru.`,
+          },
+    };
+
+    return templates[step.step_order] ?? { title: detail.title, description: detail.description };
+  }
+
   private mapRoadmapTemplate(roadmap: RoadmapMaster) {
     return {
       id_roadmap: roadmap.id_roadmap,
@@ -380,25 +572,31 @@ export class RoadmapsService {
       steps: roadmap.steps
         ?.filter((step) => step.is_active === 1)
         .sort((a, b) => a.step_order - b.step_order)
-        .map((step) => ({
+        .map((step) => {
+          const enhancedStep = this.enhanceRoadmapStep(roadmap, step);
+          return {
           id_roadmap_step: step.id_roadmap_step,
-          title: step.title,
-          description: step.description,
+          title: enhancedStep.title,
+          description: enhancedStep.description,
           step_order: step.step_order,
           estimated_duration: step.estimated_duration,
           output_target: step.output_target,
           details: step.details
             ?.filter((detail) => detail.is_active === 1)
             .sort((a, b) => a.detail_order - b.detail_order)
-            .map((detail) => ({
+            .map((detail) => {
+              const enhancedDetail = this.enhanceRoadmapDetail(roadmap, step, detail);
+              return {
               id_roadmap_step_detail: detail.id_roadmap_step_detail,
-              title: detail.title,
-              description: detail.description,
+              title: enhancedDetail.title,
+              description: enhancedDetail.description,
               reference_link: detail.reference_link,
               reference_type: detail.reference_type,
               detail_order: detail.detail_order,
-            })) ?? [],
-        })) ?? [],
+              };
+            }) ?? [],
+        };
+        }) ?? [],
     };
   }
 

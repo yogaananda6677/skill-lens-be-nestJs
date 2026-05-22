@@ -32,4 +32,10 @@ export class SiswaService {
   importExcel(file: any, actor: { id_user: number; role: UserRole }, body: any) {
     return this.siswaImportService.importExcel(file, actor, body);
   }
+
+  getLatestSpk(userId: number) {
+  return this.siswaSpkService.getLatestSpk(userId);
+}
+
+
 }

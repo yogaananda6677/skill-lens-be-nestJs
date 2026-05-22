@@ -14,6 +14,7 @@ import { SiswaImportService } from './services/siswa-import.service';
 import { SiswaProfileService } from './services/siswa-profile.service';
 import { SiswaSpkService } from './services/siswa-spk.service';
 import { SiswaService } from './siswa.service';
+import { PrestasiSiswa } from '../prestasi_siswa/entities/prestasi_siswa.entity';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { SiswaService } from './siswa.service';
       NilaiKategoriSiswa,
       MasterTag,
       SiswaTag,
+      PrestasiSiswa,
     ]),
   ],
   controllers: [SiswaController],

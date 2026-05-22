@@ -24,6 +24,7 @@ import { SemesterModule } from './semester/semester.module';
 import { SiswaModule } from './siswa/siswa.module';
 import { SuperadminModule } from './superadmin/superadmin.module';
 import { UserModule } from './user/user.module';
+import { PrestasiSiswaModule } from './prestasi_siswa/prestasi_siswa.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { UserModule } from './user/user.module';
     RoadmapStepDetailModule,
     RoadmapsModule,
     SeederModule,
+    PrestasiSiswaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

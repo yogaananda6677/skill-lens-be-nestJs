@@ -31,16 +31,33 @@ export class SiswaController {
     return this.siswaService.updateProfil(req.user.id_user, body);
   }
 
+@UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
+@Post('spk')
+prosesSpk(@Req() req: any, @Body() body: any) {
+  return this.siswaService.prosesSpk(req.user.id_user, body);
+}
+
   @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
-  @Post('spk')
-  prosesSpk(@Req() req: any, @Body() body: any) {
-    return this.siswaService.prosesSpk(req.user.id_user, body);
+  @Get('spk/latest')
+  getLatestSpk(@Req() req: any) {
+    return this.siswaService.getLatestSpk(req.user.id_user);
   }
 
-  @UseGuards(JwtAuthGuard, new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin']))
+  @UseGuards(
+    JwtAuthGuard,
+    new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin']),
+  )
   @Post('import')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
-  importExcel(@Req() req: any, @UploadedFile() file: any, @Body() body: any) {
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  importExcel(
+    @Req() req: any,
+    @UploadedFile() file: any,
+    @Body() body: any,
+  ) {
     return this.siswaService.importExcel(file, req.user, body);
   }
 }
