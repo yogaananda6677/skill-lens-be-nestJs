@@ -2,10 +2,14 @@ import {
   BadRequestException,
   Body,
   Controller,
-  Get, Res,
-  Post,Put,
-  Query,Delete,
-  Req,Param,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -20,7 +24,6 @@ import { AdminSekolahService } from './admin_sekolah.service';
 import { CreateAdminSchoolDto } from './dto/create-admin-school.dto';
 import { CreateAdminTeacherDto } from './dto/create-admin-teacher.dto';
 import { NilaiSiswaService } from '../nilai_siswa/nilai_siswa.service';
-import { MataPelajaranService } from '../mata_pelajaran/mata_pelajaran.service'; // ✅ import
 
 @Controller('admin-sekolah')
 @UseGuards(JwtAuthGuard, new RoleGuard(['admin_sekolah']))
@@ -28,7 +31,6 @@ export class AdminSekolahController {
   constructor(
     private readonly adminSekolahService: AdminSekolahService,
     private readonly nilaiSiswaService: NilaiSiswaService,
-    private readonly mataPelajaranService: MataPelajaranService, // ✅ tambahkan
   ) {}
 
   @Get('status')
@@ -68,10 +70,34 @@ export class AdminSekolahController {
   }
 
   @Get('mata-pelajaran')
-  async getMataPelajaran(@Req() req: any) {
-    const id_sekolah = req.user?.id_sekolah;
-    const data = await this.mataPelajaranService.findAllBySekolah(id_sekolah);
-    return { data };
+  listMataPelajaran(@Req() req: any) {
+    return this.adminSekolahService.listMataPelajaran(req.user.id);
+  }
+
+  @Post('mata-pelajaran')
+  createMataPelajaran(@Req() req: any, @Body() body: any) {
+    return this.adminSekolahService.createMataPelajaran(req.user.id, body);
+  }
+
+  @Put('mata-pelajaran/:id')
+  updateMataPelajaran(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    return this.adminSekolahService.updateMataPelajaran(
+      req.user.id,
+      Number(id),
+      body,
+    );
+  }
+
+  @Delete('mata-pelajaran/:id')
+  deleteMataPelajaran(@Req() req: any, @Param('id') id: string) {
+    return this.adminSekolahService.deleteMataPelajaran(
+      req.user.id,
+      Number(id),
+    );
   }
 
   @Get('siswa')
@@ -94,67 +120,122 @@ export class AdminSekolahController {
       req.user.id,
     );
 
+    const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
+    const isSma = jenisSekolah === 'SMA';
+
+    const semester = Number(body?.semester ?? 0);
+
+    const isSemesterUmumSma =
+      isSma && (semester === 1 || semester === 2);
+
+    const isSemesterJurusanSma =
+      isSma && [3, 4, 5, 6].includes(semester);
+
     const idJurusan = Number(
-      body?.id_jurusan ?? body?.idJurusan ?? body?.jurusanId ?? 0,
+      body?.id_jurusan ??
+        body?.idJurusan ??
+        body?.jurusanId ??
+        0,
     );
 
-    if (!idJurusan) {
-      throw new BadRequestException('Jurusan wajib dipilih sebelum import.');
+    if (isSma && ![1, 2, 3, 4, 5, 6].includes(semester)) {
+      throw new BadRequestException(
+        'Semester wajib dipilih untuk import nilai SMA.',
+      );
+    }
+
+    if (!isSma && !idJurusan) {
+      throw new BadRequestException(
+        'Jurusan wajib dipilih untuk import nilai SMK.',
+      );
+    }
+
+    if (isSemesterJurusanSma && !idJurusan) {
+      throw new BadRequestException(
+        'Jurusan wajib dipilih untuk import nilai SMA semester 3 sampai 6.',
+      );
     }
 
     return this.nilaiSiswaService.importExcel(file, {
       sekolahId: sekolah.id_sekolah,
-      jurusanId: idJurusan,
-      jenisSekolah: sekolah.jenis_sekolah || 'SMA',
+      jurusanId: isSemesterUmumSma ? null : idJurusan,
+      semester: isSma ? semester : null,
+      jenisSekolah,
       tujuanKarir: 'kuliah',
       topN: 3,
       dryRun: false,
     });
   }
 
-  @Post('mata-pelajaran')
-  async createMataPelajaran(@Req() req: any, @Body() body: any) {
-    const { nama_mapel, id_jurusan } = body;
-    if (!nama_mapel || !id_jurusan) {
-      throw new BadRequestException('Nama mapel dan jurusan wajib diisi');
-    }
-    const id_sekolah = req.user?.id_sekolah;
-    const newMapel = await this.mataPelajaranService.create({
-      nama_mapel,
-      tipe_mapel: 'jurusan',
-      id_jurusan,
-      id_sekolah,
-      is_default: false,
-    });
-    return { message: 'Mata pelajaran berhasil ditambahkan', data: newMapel };
-  }
-
-  @Put('mata-pelajaran/:id')
-  async updateMataPelajaran(@Param('id') id: number, @Body() body: any) {
-    const { nama_mapel, id_jurusan } = body;
-    const updated = await this.mataPelajaranService.update(id, {
-      nama_mapel,
-      id_jurusan,
-    });
-    return { message: 'Mata pelajaran diperbarui', data: updated };
-  }
-
-  @Delete('mata-pelajaran/:id')
-  async deleteMataPelajaran(@Param('id') id: number) {
-    await this.mataPelajaranService.delete(id);
-    return { message: 'Mata pelajaran dihapus' };
-  }
-
   @Get('nilai/template')
-  async downloadTemplate(@Query('jurusanId') jurusanId: string, @Res() res) {
-    const buffer = await this.nilaiSiswaService.getTemplateNilaiByJurusan(Number(jurusanId));
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=template_nilai.xlsx');
-    res.send(buffer);
+  async downloadTemplate(
+    @Req() req: any,
+    @Query('jurusanId') jurusanId: string,
+    @Query('semester') semester: string,
+    @Res() res: Response,
+  ) {
+    const sekolah = await this.adminSekolahService.getApprovedSchoolOrFail(
+      req.user.id,
+    );
+
+    const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
+    const isSma = jenisSekolah === 'SMA';
+
+    const semesterNumber = Number(semester ?? 0);
+    const idJurusan = Number(jurusanId ?? 0);
+
+    const isSemesterUmumSma =
+      isSma && (semesterNumber === 1 || semesterNumber === 2);
+
+    const isSemesterJurusanSma =
+      isSma && [3, 4, 5, 6].includes(semesterNumber);
+
+    if (isSma && ![1, 2, 3, 4, 5, 6].includes(semesterNumber)) {
+      throw new BadRequestException(
+        'Semester wajib dipilih untuk template SMA.',
+      );
+    }
+
+    if (!isSma && !idJurusan) {
+      throw new BadRequestException('Jurusan wajib dipilih untuk template SMK.');
+    }
+
+    if (isSemesterJurusanSma && !idJurusan) {
+      throw new BadRequestException(
+        'Jurusan wajib dipilih untuk template SMA semester 3 sampai 6.',
+      );
+    }
+
+    const buffer = await this.nilaiSiswaService.getTemplateNilaiByJurusan(
+      isSemesterUmumSma ? null : idJurusan,
+      {
+        semester: isSma ? semesterNumber : null,
+        jenisSekolah,
+        sekolahId: sekolah.id_sekolah,
+      },
+    );
+
+    const filename = isSma
+      ? isSemesterUmumSma
+        ? `template_nilai_sma_semester_${semesterNumber}_umum.xlsx`
+        : `template_nilai_sma_semester_${semesterNumber}_jurusan_${idJurusan}.xlsx`
+      : `template_nilai_smk_jurusan_${idJurusan}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+
+    return res.send(buffer);
   }
 
   @Get('siswa/:id/nilai')
-  async getNilaiSiswa(@Param('id') id: string, @Req() req: any) {
-    return this.adminSekolahService.getNilaiSiswa(+id, req.user.id);
+  getNilaiSiswa(@Param('id') id: string, @Req() req: any) {
+    return this.adminSekolahService.getNilaiSiswa(Number(id), req.user.id);
   }
 }

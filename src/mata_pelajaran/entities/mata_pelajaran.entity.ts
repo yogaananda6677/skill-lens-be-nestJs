@@ -14,12 +14,16 @@ import { NILAI_AKADEMIK_CATEGORIES } from '../../nilai_siswa/constants/academic-
 
 import type { AcademicCategory } from '../../nilai_siswa/constants/academic-categories';
 
-@Entity()
+@Entity('mata_pelajaran')
+@Index(['nama_mapel', 'semester', 'id_jurusan', 'id_sekolah'])
 export class MataPelajaran {
   @PrimaryGeneratedColumn()
   id_mapel!: number;
 
-  @Column()
+  @Column({
+    type: 'varchar',
+    length: 100,
+  })
   nama_mapel!: string;
 
   @Index({ unique: true })
@@ -39,15 +43,17 @@ export class MataPelajaran {
 
   @Column({
     type: 'enum',
-    enum: [
-      'umum',
-      'jurusan',
-    ],
+    enum: ['umum', 'jurusan'],
     default: 'umum',
   })
   tipe_mapel!: 'umum' | 'jurusan';
 
-  // RELASI JURUSAN
+  @Column({
+    type: 'int',
+    nullable: true,
+  })
+  semester!: number | null;
+
   @Column({
     type: 'int',
     nullable: true,
@@ -63,7 +69,6 @@ export class MataPelajaran {
   })
   jurusan!: Jurusan | null;
 
-  // RELASI SEKOLAH
   @Column({
     type: 'int',
     nullable: true,
@@ -80,6 +85,7 @@ export class MataPelajaran {
   sekolah!: Sekolah | null;
 
   @Column({
+    type: 'boolean',
     default: false,
   })
   is_default!: boolean;

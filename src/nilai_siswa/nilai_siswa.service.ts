@@ -7,7 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
 import * as bcrypt from 'bcrypt';
-import { MataPelajaranService } from '../mata_pelajaran/mata_pelajaran.service';
+import * as ExcelJS from 'exceljs';
+
 import { User } from '../user/entities/user.entity';
 import { Siswa } from '../siswa/entities/siswa.entity';
 import { Semester } from '../semester/entities/semester.entity';
@@ -18,7 +19,6 @@ import { Jurusan } from '../jurusan/entities/jurusan.entity';
 import { NilaiSiswa } from './entities/nilai_siswa.entity';
 import { NilaiKategoriSiswa } from './entities/nilai_kategori_siswa.entity';
 import { normalizeImportNilaiOptions } from './dto/import-nilai-excel.dto';
-import * as ExcelJS from 'exceljs';
 import type {
   ImportNilaiExcelDto,
   ImportNilaiExcelOptions,
@@ -39,6 +39,10 @@ import type {
   SubjectCategoryResult,
   SubjectColumnMeta,
 } from './utils/academic-excel-mapper';
+
+type ImportOptionsWithSemester = ImportNilaiExcelOptions & {
+  semester?: number | null;
+};
 
 interface ParsedGrade {
   semester: number;
@@ -167,13 +171,43 @@ interface PersistedImportResult {
 }
 
 @Injectable()
-export class NilaiSiswaService {   // ← pastikan ada 'export'
+export class NilaiSiswaService {
   constructor(
     private readonly dataSource: DataSource,
+
     @InjectRepository(NilaiKategoriSiswa)
     private readonly kategoriRepo: Repository<NilaiKategoriSiswa>,
-    private readonly mataPelajaranService: MataPelajaranService, // ← pastikan ini ada
   ) {}
+
+  private getJenisSekolah(options?: Partial<ImportNilaiExcelOptions>): string {
+    return String(options?.jenisSekolah || 'SMA').toUpperCase();
+  }
+
+  private getOptionSemester(options: ImportNilaiExcelOptions): number | null {
+    const raw = (options as ImportOptionsWithSemester).semester;
+    const value = raw === undefined || raw === null ? null : Number(raw);
+
+    return Number.isFinite(value) && value ? value : null;
+  }
+
+  private setOptionSemester(
+    options: ImportNilaiExcelOptions,
+    value: number | null,
+  ) {
+    (options as ImportOptionsWithSemester).semester = value;
+  }
+
+  private normalizeIncomingSemester(dto: ImportNilaiExcelDto): number | null {
+    const raw = (dto as { semester?: number | string | null }).semester;
+
+    if (raw === undefined || raw === null || raw === '') {
+      return null;
+    }
+
+    const semester = Number(raw);
+
+    return Number.isFinite(semester) ? semester : null;
+  }
 
   async importExcel(
     file: any,
@@ -186,6 +220,18 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     }
 
     const options = normalizeImportNilaiOptions(dto);
+    const jenisSekolah = this.getJenisSekolah(options);
+    const isSma = jenisSekolah === 'SMA';
+    const selectedSemester = this.normalizeIncomingSemester(dto);
+
+    if (isSma && ![1, 2, 3, 4, 5].includes(Number(selectedSemester))) {
+      throw new BadRequestException(
+        'Semester wajib dipilih untuk import nilai SMA.',
+      );
+    }
+
+    this.setOptionSemester(options, isSma ? selectedSemester : null);
+
     if (options.jurusanId && !options.jurusan) {
       const jurusan = await this.dataSource.getRepository(Jurusan).findOne({
         where: { id_jurusan: options.jurusanId },
@@ -203,17 +249,21 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
 
       options.jurusan = jurusan.nama_jurusan;
     }
+
     const { weights: semesterWeights, warnings: weightWarnings } =
       parseSemesterWeights(options.semesterWeights);
+
     const workbook = XLSX.read(file.buffer, {
       type: 'buffer',
       cellDates: false,
     });
 
     const parsed = this.parseWorkbook(workbook, semesterWeights, options);
+
     const fallbackSubjects = parsed.subjectMappings.filter(
       (mapping) => mapping.source === 'fallback',
     );
+
     const warnings = [
       ...weightWarnings,
       ...parsed.warnings,
@@ -229,6 +279,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     let results = parsed.students.map((student) =>
       this.buildStudentAcademicResult(student, semesterWeights, options),
     );
+
     let databaseStats: ImportDatabaseStats | undefined;
 
     if (!options.dryRun) {
@@ -237,6 +288,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
         results,
         options,
       );
+
       results = persisted.results;
       databaseStats = persisted.stats;
     }
@@ -292,6 +344,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     });
 
     const siswa = rows[0].siswa;
+
     return {
       id_siswa: siswa.id_siswa,
       nisn: siswa.nisn,
@@ -372,8 +425,13 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     const warnings: string[] = [];
     let totalGrades = 0;
 
+    const jenisSekolah = this.getJenisSekolah(options);
+    const isSma = jenisSekolah === 'SMA';
+    const selectedSemester = this.getOptionSemester(options);
+
     const candidateSheets = workbook.SheetNames.filter((sheetName) => {
       const key = normalizeSubjectKey(sheetName);
+
       return ![
         'panduan',
         'mapping mapel',
@@ -384,8 +442,20 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     });
 
     candidateSheets.forEach((sheetName, sheetIndex) => {
-      const semester = parseSemesterNumber(sheetName, sheetIndex);
+      const parsedSemester = parseSemesterNumber(sheetName, sheetIndex);
+      const sheetKey = normalizeSubjectKey(sheetName);
+      const semester = isSma ? Number(selectedSemester) : parsedSemester || 1;
+
       if (!semester || semester > 6) return;
+
+      if (
+        isSma &&
+        sheetKey.includes('semester') &&
+        parsedSemester &&
+        parsedSemester !== selectedSemester
+      ) {
+        return;
+      }
 
       const worksheet = workbook.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
@@ -398,6 +468,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       if (!rows.length) return;
 
       const headerRowIndex = this.findHeaderRowIndex(rows);
+
       if (headerRowIndex < 0) {
         warnings.push(
           `Sheet ${sheetName} dilewati karena tidak ditemukan header NISN dan Nama.`,
@@ -417,9 +488,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       }
 
       if (!subjectColumns.length) {
-        warnings.push(
-          `Sheet ${sheetName} tidak memiliki kolom mata pelajaran.`,
-        );
+        warnings.push(`Sheet ${sheetName} tidak memiliki kolom mata pelajaran.`);
         return;
       }
 
@@ -434,11 +503,13 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       });
 
       semesters.add(semester);
+
       const bobot = semesterWeights[semester] ?? 1;
 
       rows.slice(headerRowIndex + 1).forEach((row) => {
         const nisn = this.readCell(row, columns.nisn);
         const nama = this.readCell(row, columns.nama);
+
         if (!nisn || !nama) return;
 
         const student = this.getOrCreateAccumulator(students, nisn, nama, {
@@ -450,6 +521,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
 
         subjectColumns.forEach((subjectColumn) => {
           const nilai = toNumber(row[subjectColumn.columnIndex]);
+
           if (nilai === null) return;
 
           this.pushGrade(student, semester, sheetName, subjectColumn, nilai);
@@ -457,10 +529,9 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
         });
       });
 
-      if (!bobot)
-        warnings.push(
-          `Bobot semester ${semester} kosong. Sistem memakai bobot 1.`,
-        );
+      if (!bobot) {
+        warnings.push(`Bobot semester ${semester} kosong. Sistem memakai bobot 1.`);
+      }
     });
 
     if (!students.size) {
@@ -485,6 +556,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       const keys = row.map((cell) => normalizeSubjectKey(cell));
       const hasNisn = keys.includes('nisn') || keys.includes('nis');
       const hasNama = keys.includes('nama') || keys.includes('nama siswa');
+
       return hasNisn && hasNama;
     });
   }
@@ -497,6 +569,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     jurusan: number;
   } {
     const keys = headerRow.map((cell) => normalizeSubjectKey(cell));
+
     return {
       nisn: this.findColumn(keys, ['nisn', 'nis']),
       nama: this.findColumn(keys, ['nama', 'nama siswa']),
@@ -516,6 +589,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
 
   private readCell(row: unknown[], index: number): string {
     if (index < 0) return '';
+
     return String(row[index] ?? '').trim();
   }
 
@@ -538,6 +612,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
         rawGrades: [],
         semesters: {},
       };
+
       students.set(key, student);
     }
 
@@ -556,10 +631,12 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     subject: SubjectColumnMeta,
     nilai: number,
   ): void {
-    if (!student.semesters[semester])
+    if (!student.semesters[semester]) {
       student.semesters[semester] = this.createEmptyBuckets();
+    }
 
     const bucket = student.semesters[semester][subject.kategori];
+
     bucket.sum += nilai;
     bucket.count += 1;
     bucket.mapel.add(subject.mapel);
@@ -577,7 +654,12 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
   private createEmptyBuckets(): Record<AcademicCategory, CategoryBucket> {
     return NILAI_AKADEMIK_CATEGORIES.reduce(
       (acc, category) => {
-        acc[category] = { sum: 0, count: 0, mapel: new Set<string>() };
+        acc[category] = {
+          sum: 0,
+          count: 0,
+          mapel: new Set<string>(),
+        };
+
         return acc;
       },
       {} as Record<AcademicCategory, CategoryBucket>,
@@ -590,6 +672,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     options: ImportNilaiExcelOptions,
   ): StudentAcademicResult {
     const nilaiAkademik = emptyAcademicScores();
+
     const rincianPerKategori = NILAI_AKADEMIK_CATEGORIES.reduce(
       (acc, category) => {
         acc[category] = [];
@@ -597,15 +680,17 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       },
       {} as Record<AcademicCategory, FinalCategoryDetail[]>,
     );
-    const rincianPerSemester: StudentAcademicResult['rincian_per_semester'] =
-      {};
+
+    const rincianPerSemester: StudentAcademicResult['rincian_per_semester'] = {};
 
     Object.entries(student.semesters).forEach(
       ([semesterKey, categoryBuckets]) => {
         const semester = Number(semesterKey);
+
         rincianPerSemester[semester] = NILAI_AKADEMIK_CATEGORIES.reduce(
           (acc, category) => {
             const bucket = categoryBuckets[category];
+
             acc[category] = {
               rata_rata: bucket.count
                 ? roundScore(bucket.sum / bucket.count)
@@ -613,6 +698,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
               jumlah_mapel: bucket.count,
               mapel: Array.from(bucket.mapel.values()).sort(),
             };
+
             return acc;
           },
           {} as Record<
@@ -632,10 +718,12 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
         .forEach(([semesterKey, categoryBuckets]) => {
           const semester = Number(semesterKey);
           const bucket = categoryBuckets[category];
+
           if (!bucket?.count) return;
 
           const average = bucket.sum / bucket.count;
           const weight = semesterWeights[semester] ?? 1;
+
           numerator += average * weight;
           denominator += weight;
 
@@ -696,7 +784,6 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       const kurikulumCache = new Map<string, KurikulumMapel>();
       const siswaByNisn = new Map<string, Siswa>();
 
-      // Tahap 1: data siswa wajib tersedia lebih dahulu supaya nilai_kategori_siswa punya id_siswa yang valid.
       for (const student of students) {
         const result = resultByNisn.get(student.nisn)!;
         const { siswa, akun } = await this.findOrCreateSiswa(
@@ -705,6 +792,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
           options,
           stats,
         );
+
         siswaByNisn.set(student.nisn, siswa);
 
         result.id_siswa = siswa.id_siswa;
@@ -715,7 +803,6 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
         };
       }
 
-      // Tahap 2-4: mapel, kurikulum_mapel, dan nilai_siswa disimpan dari nilai mentah Excel.
       for (const student of students) {
         const siswa = siswaByNisn.get(student.nisn)!;
 
@@ -726,12 +813,15 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
             options,
             semesterCache,
           );
+
           const mapel = await this.findOrCreateMapel(
             manager,
             grade,
+            options,
             mapelCache,
             stats,
           );
+
           const kurikulum = await this.findOrCreateKurikulum(
             manager,
             semester,
@@ -740,19 +830,23 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
             kurikulumCache,
             stats,
           );
+
           await this.upsertNilai(manager, siswa, kurikulum, grade.nilai, stats);
         }
       }
 
-      // Tahap 5: hasil agregasi 8 kategori akademik disimpan per id_siswa.
       for (const student of students) {
         const siswa = siswaByNisn.get(student.nisn)!;
         const result = resultByNisn.get(student.nisn)!;
+
         await this.upsertNilaiKategori(manager, siswa, result, stats);
         persistedResults.push(result);
       }
 
-      return { results: persistedResults, stats };
+      return {
+        results: persistedResults,
+        stats,
+      };
     });
   }
 
@@ -784,12 +878,18 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     const jurusanRepo = manager.getRepository(Jurusan);
 
     let siswa = await siswaRepo.findOne({
-      where: { nisn: student.nisn },
+      where: {
+        nisn: student.nisn,
+      },
       relations: ['user', 'jurusan_detail'],
     });
 
     const jurusanDetail = options.jurusanId
-      ? await jurusanRepo.findOne({ where: { id_jurusan: options.jurusanId } })
+      ? await jurusanRepo.findOne({
+          where: {
+            id_jurusan: options.jurusanId,
+          },
+        })
       : null;
 
     if (options.jurusanId && !jurusanDetail) {
@@ -814,7 +914,9 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
 
     if (!siswa) {
       let user = await userRepo.findOne({
-        where: { email: `${student.nisn}@skilllens.local` },
+        where: {
+          email: `${student.nisn}@skilllens.local`,
+        },
       });
 
       if (!user) {
@@ -849,7 +951,9 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
           kelas: student.kelas || '-',
           jurusan: importJurusanName,
           id_sekolah: options.sekolahId ?? null,
-          sekolah: options.sekolahId ? { id_sekolah: options.sekolahId } : null,
+          sekolah: options.sekolahId
+            ? ({ id_sekolah: options.sekolahId } as Sekolah)
+            : null,
           id_jurusan: jurusanDetail?.id_jurusan ?? options.jurusanId ?? null,
           jurusan_detail: jurusanDetail,
           user,
@@ -918,18 +1022,19 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
   ): Promise<Semester> {
     const repo = manager.getRepository(Semester);
     const nama_semester = `Semester ${semesterNumber}`;
-
     const tahunAjaranUntukSemester = this.computeTahunAjaranForSemester(
       semesterNumber,
       options.tahunAjaran,
     );
-
     const key = `${nama_semester}|${tahunAjaranUntukSemester}`;
     const cached = cache.get(key);
+
     if (cached) return cached;
 
     let semester = await repo.findOne({
-      where: { nama_semester },
+      where: {
+        nama_semester,
+      },
     });
 
     if (!semester) {
@@ -941,6 +1046,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     }
 
     cache.set(key, semester);
+
     return semester;
   }
 
@@ -948,16 +1054,14 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     semesterNumber: number,
     baseTahunAjaran: string,
   ): string {
-    // baseTahunAjaran format: "YYYY/YYYY+1"
     const [startStr] = String(baseTahunAjaran).split('/');
     const baseStartYear = Number(startStr);
 
     if (!Number.isFinite(baseStartYear)) {
-      // fallback: tetap pakai base yang dikirim
       return baseTahunAjaran;
     }
 
-    const groupIndex = Math.floor((semesterNumber - 1) / 2); // (1-2)->0, (3-4)->1, (5-6)->2
+    const groupIndex = Math.floor((semesterNumber - 1) / 2);
     const startYear = baseStartYear + groupIndex;
     const endYear = startYear + 1;
 
@@ -967,39 +1071,91 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
   private async findOrCreateMapel(
     manager: EntityManager,
     grade: ParsedGrade,
+    options: ImportNilaiExcelOptions,
     cache: Map<string, MataPelajaran>,
     stats: ImportDatabaseStats,
   ): Promise<MataPelajaran> {
     const repo = manager.getRepository(MataPelajaran);
-    const cached = cache.get(grade.mapelKey);
+    const jenisSekolah = this.getJenisSekolah(options);
+    const isSma = jenisSekolah === 'SMA';
+    const isMapelUmumSma = isSma && grade.semester <= 2;
+    const effectiveJurusanId = isMapelUmumSma
+      ? null
+      : options.jurusanId ?? null;
+
+    const cacheKey = [
+      options.sekolahId ?? 'global',
+      effectiveJurusanId ?? 'umum',
+      grade.semester,
+      grade.mapelKey,
+    ].join('|');
+
+    const cached = cache.get(cacheKey);
+
     if (cached) return cached;
 
-    let mapel = await repo.findOne({ where: { kode_mapel: grade.mapelKey } });
-    if (!mapel) {
-      mapel = await repo.findOne({ where: { nama_mapel: grade.mapel } });
+    const qb = repo
+      .createQueryBuilder('mapel')
+      .where('LOWER(mapel.nama_mapel) = LOWER(:namaMapel)', {
+        namaMapel: grade.mapel,
+      })
+      .andWhere('mapel.semester = :semester', {
+        semester: grade.semester,
+      });
+
+    if (options.sekolahId) {
+      qb.andWhere('mapel.id_sekolah = :idSekolah', {
+        idSekolah: options.sekolahId,
+      });
+    } else {
+      qb.andWhere('mapel.id_sekolah IS NULL');
     }
+
+    if (effectiveJurusanId) {
+      qb.andWhere('mapel.id_jurusan = :idJurusan', {
+        idJurusan: effectiveJurusanId,
+      });
+    } else {
+      qb.andWhere('mapel.id_jurusan IS NULL');
+    }
+
+    let mapel = await qb.getOne();
 
     if (!mapel) {
       mapel = repo.create({
         nama_mapel: grade.mapel,
-        kode_mapel: grade.mapelKey,
+        kode_mapel: null,
         kategori: grade.kategori,
+        semester: grade.semester,
+        tipe_mapel: isMapelUmumSma ? 'umum' : 'jurusan',
+        id_sekolah: options.sekolahId ?? null,
+        id_jurusan: effectiveJurusanId,
       });
+
       mapel = await repo.save(mapel);
       stats.mapel_dibuat += 1;
     } else {
       const perluUpdate =
-        mapel.kode_mapel !== grade.mapelKey ||
         mapel.kategori !== grade.kategori ||
-        mapel.nama_mapel !== grade.mapel;
-      mapel.kode_mapel = mapel.kode_mapel || grade.mapelKey;
+        mapel.semester !== grade.semester ||
+        mapel.tipe_mapel !== (isMapelUmumSma ? 'umum' : 'jurusan') ||
+        mapel.id_jurusan !== effectiveJurusanId;
+
       mapel.kategori = grade.kategori;
-      mapel.nama_mapel = mapel.nama_mapel || grade.mapel;
+      mapel.semester = grade.semester;
+      mapel.tipe_mapel = isMapelUmumSma ? 'umum' : 'jurusan';
+      mapel.id_sekolah = options.sekolahId ?? mapel.id_sekolah ?? null;
+      mapel.id_jurusan = effectiveJurusanId;
+
       mapel = await repo.save(mapel);
-      if (perluUpdate) stats.mapel_diupdate += 1;
+
+      if (perluUpdate) {
+        stats.mapel_diupdate += 1;
+      }
     }
 
-    cache.set(grade.mapelKey, mapel);
+    cache.set(cacheKey, mapel);
+
     return mapel;
   }
 
@@ -1012,14 +1168,30 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     stats: ImportDatabaseStats,
   ): Promise<KurikulumMapel> {
     const repo = manager.getRepository(KurikulumMapel);
-    const key = `${options.sekolahId || 'none'}|${options.jurusanId || 'none'}|${semester.id_semester}|${mapel.id_mapel}`;
+    const jenisSekolah = this.getJenisSekolah(options);
+    const isSma = jenisSekolah === 'SMA';
+    const isMapelUmumSma =
+      isSma && mapel.semester !== null && mapel.semester <= 2;
+    const effectiveJurusanId = isMapelUmumSma
+      ? null
+      : options.jurusanId ?? null;
+
+    const key = [
+      options.sekolahId ?? 'none',
+      effectiveJurusanId ?? 'umum',
+      semester.id_semester,
+      mapel.id_mapel,
+      mapel.semester ?? 'none',
+    ].join('|');
+
     const cached = cache.get(key);
+
     if (cached) return cached;
 
     let kurikulum = await repo.findOne({
       where: {
         id_sekolah: options.sekolahId ?? IsNull(),
-        id_jurusan: options.jurusanId ?? IsNull(),
+        id_jurusan: effectiveJurusanId ?? IsNull(),
         id_semester: semester.id_semester,
         id_mapel: mapel.id_mapel,
       },
@@ -1028,19 +1200,25 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     if (!kurikulum) {
       kurikulum = repo.create({
         id_sekolah: options.sekolahId ?? null,
-        sekolah: options.sekolahId ? { id_sekolah: options.sekolahId } : null,
-        id_jurusan: options.jurusanId ?? null,
-        jurusan: options.jurusanId ? { id_jurusan: options.jurusanId } : null,
+        sekolah: options.sekolahId
+          ? ({ id_sekolah: options.sekolahId } as Sekolah)
+          : null,
+        id_jurusan: effectiveJurusanId,
+        jurusan: effectiveJurusanId
+          ? ({ id_jurusan: effectiveJurusanId } as Jurusan)
+          : null,
         id_semester: semester.id_semester,
         semester,
         id_mapel: mapel.id_mapel,
         mata_pelajaran: mapel,
       });
+
       kurikulum = await repo.save(kurikulum);
       stats.kurikulum_mapel_dibuat += 1;
     }
 
     cache.set(key, kurikulum);
+
     return kurikulum;
   }
 
@@ -1052,6 +1230,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
     stats: ImportDatabaseStats,
   ): Promise<void> {
     const repo = manager.getRepository(NilaiSiswa);
+
     let row = await repo.findOne({
       where: {
         id_siswa: siswa.id_siswa,
@@ -1067,6 +1246,7 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
         id_kurikulum_mapel: kurikulum.id_kurikulum_mapel,
         kurikulum_mapel: kurikulum,
       });
+
       stats.nilai_siswa_dibuat += 1;
     } else {
       row.nilai = nilai;
@@ -1093,14 +1273,19 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       const totalBobot = detail.reduce((sum, item) => sum + item.bobot, 0);
 
       let row = await repo.findOne({
-        where: { id_siswa: siswa.id_siswa, kategori: category },
+        where: {
+          id_siswa: siswa.id_siswa,
+          kategori: category,
+        },
       });
+
       if (!row) {
         row = repo.create({
           id_siswa: siswa.id_siswa,
           siswa,
           kategori: category,
         });
+
         stats.nilai_kategori_dibuat += 1;
       } else {
         stats.nilai_kategori_diupdate += 1;
@@ -1110,19 +1295,192 @@ export class NilaiSiswaService {   // ← pastikan ada 'export'
       row.total_bobot_terpakai = roundScore(totalBobot, 4);
       row.jumlah_mapel_terpakai = totalMapel;
       row.rincian_semester = detail;
+
       await repo.save(row);
     }
   }
 
-  async getTemplateNilaiByJurusan(jurusanId: number): Promise<Buffer> {
-    const mapelList = await this.mataPelajaranService.findAllByJurusan(jurusanId);
+  async getTemplateNilaiByJurusan(
+    jurusanId: number | null,
+    options?: {
+      semester?: number | null;
+      jenisSekolah?: string;
+      sekolahId?: number | null;
+    },
+  ): Promise<Buffer> {
+    const semester = options?.semester ?? null;
+    const jenisSekolah = String(options?.jenisSekolah || 'SMA').toUpperCase();
+    const isSma = jenisSekolah === 'SMA';
+    const sekolahId = options?.sekolahId ?? null;
+
+    const isSemesterUmumSma =
+      isSma && (semester === 1 || semester === 2);
+
+    const isSemesterJurusanSma =
+      isSma && [3, 4, 5, 6].includes(Number(semester));
+
+    if (isSma && ![1, 2, 3, 4, 5, 6].includes(Number(semester))) {
+      throw new BadRequestException(
+        'Semester wajib dipilih untuk template nilai SMA.',
+      );
+    }
+
+    if (!isSma && !jurusanId) {
+      throw new BadRequestException('Jurusan wajib dipilih untuk template SMK.');
+    }
+
+    if (isSemesterJurusanSma && !jurusanId) {
+      throw new BadRequestException(
+        'Jurusan wajib dipilih untuk template SMA semester 3 sampai 6.',
+      );
+    }
+
+    let jurusan: Jurusan | null = null;
+
+    if (jurusanId) {
+      jurusan = await this.dataSource.getRepository(Jurusan).findOne({
+        where: {
+          id_jurusan: jurusanId,
+        },
+      });
+
+      if (!jurusan) {
+        throw new BadRequestException('Jurusan tidak ditemukan.');
+      }
+    }
+
+    const finalSekolahId = sekolahId ?? jurusan?.id_sekolah ?? null;
+    const mapelRepo = this.dataSource.getRepository(MataPelajaran);
+
+    let mapelList: MataPelajaran[] = [];
+
+    if (isSma) {
+      if (isSemesterUmumSma) {
+        mapelList = await mapelRepo
+          .createQueryBuilder('mapel')
+          .where('mapel.semester = :semester', {
+            semester,
+          })
+          .andWhere('mapel.tipe_mapel = :tipeMapel', {
+            tipeMapel: 'umum',
+          })
+          .andWhere('mapel.id_jurusan IS NULL')
+          .andWhere(
+            finalSekolahId
+              ? '(mapel.id_sekolah = :sekolahId OR mapel.id_sekolah IS NULL OR mapel.is_default = :isDefault)'
+              : '(mapel.id_sekolah IS NULL OR mapel.is_default = :isDefault)',
+            {
+              sekolahId: finalSekolahId,
+              isDefault: true,
+            },
+          )
+          .orderBy('mapel.nama_mapel', 'ASC')
+          .getMany();
+      } else {
+        mapelList = await mapelRepo
+          .createQueryBuilder('mapel')
+          .where('mapel.semester = :semester', {
+            semester,
+          })
+          .andWhere('mapel.id_jurusan = :jurusanId', {
+            jurusanId,
+          })
+          .andWhere(
+            finalSekolahId
+              ? '(mapel.id_sekolah = :sekolahId OR mapel.id_sekolah IS NULL)'
+              : 'mapel.id_sekolah IS NULL',
+            {
+              sekolahId: finalSekolahId,
+            },
+          )
+          .orderBy('mapel.nama_mapel', 'ASC')
+          .getMany();
+      }
+    } else {
+      mapelList = await mapelRepo
+        .createQueryBuilder('mapel')
+        .where('mapel.id_jurusan = :jurusanId', {
+          jurusanId,
+        })
+        .andWhere(
+          finalSekolahId
+            ? '(mapel.id_sekolah = :sekolahId OR mapel.id_sekolah IS NULL)'
+            : 'mapel.id_sekolah IS NULL',
+          {
+            sekolahId: finalSekolahId,
+          },
+        )
+        .orderBy('mapel.nama_mapel', 'ASC')
+        .getMany();
+    }
+
+    if (!mapelList.length) {
+      throw new BadRequestException(
+        isSma
+          ? isSemesterUmumSma
+            ? `Belum ada mata pelajaran umum untuk semester ${semester}.`
+            : `Belum ada mata pelajaran untuk semester ${semester} dan jurusan ini.`
+          : 'Belum ada mata pelajaran untuk jurusan SMK ini.',
+      );
+    }
+
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Template Nilai');
-    const headers = ['NISN', 'Nama Siswa', 'Kelas', ...mapelList.map(m => m.nama_mapel)];
+    workbook.creator = 'SkillLens';
+    workbook.created = new Date();
+
+    const sheetName = isSma ? `Semester ${semester}` : 'Template Nilai';
+    const sheet = workbook.addWorksheet(sheetName);
+
+    const headers = [
+      'NISN',
+      'Nama Siswa',
+      'Kelas',
+      ...mapelList.map((m) => m.nama_mapel),
+    ];
+
     sheet.addRow(headers);
-    sheet.addRow(['1234567890', 'Contoh Siswa', 'X', ...mapelList.map(() => '')]);
-    sheet.columns.forEach(col => { col.width = 20; });
+
+    sheet.addRow([
+      '1234567890',
+      'Contoh Siswa',
+      isSma
+        ? isSemesterUmumSma
+          ? 'XII Umum'
+          : `XII ${jurusan?.nama_jurusan || ''}`
+        : jurusan?.nama_jurusan || '',
+      ...mapelList.map(() => ''),
+    ]);
+
+    sheet.columns.forEach((column) => {
+      column.width = 22;
+    });
+
+    const headerRow = sheet.getRow(1);
+
+    headerRow.font = {
+      bold: true,
+      color: {
+        argb: 'FFFFFFFF',
+      },
+    };
+
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: {
+        argb: 'FF1D4ED8',
+      },
+    };
+
+    headerRow.alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
     const buffer = await workbook.xlsx.writeBuffer();
+
     return Buffer.from(buffer);
   }
 }

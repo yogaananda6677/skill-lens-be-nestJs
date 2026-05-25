@@ -1,25 +1,34 @@
+type OptionalNumberInput = number | string | null | undefined;
+type OptionalBooleanInput = boolean | string | number | null | undefined;
+
 export interface ImportNilaiExcelDto {
-  sekolahId?: number | string;
-  jurusanId?: number | string;
-  tahunAjaran?: string;
-  jurusan?: string;
-  jenisSekolah?: string;
-  tujuanKarir?: string;
-  topN?: number | string;
-  dryRun?: boolean | string;
-  semesterWeights?: string;
+  sekolahId?: OptionalNumberInput;
+  jurusanId?: OptionalNumberInput;
+  jurusan?: string | null;
+
+  semester?: OptionalNumberInput;
+
+  jenisSekolah?: string | null;
+  tujuanKarir?: string | null;
+  topN?: OptionalNumberInput;
+  dryRun?: OptionalBooleanInput;
+  tahunAjaran?: string | null;
+  semesterWeights?: string | Record<number, number> | null;
 }
 
 export interface ImportNilaiExcelOptions {
-  sekolahId?: number;
-  jurusanId?: number;
-  tahunAjaran: string;
+  sekolahId?: number | null;
+  jurusanId?: number | null;
   jurusan?: string;
+
+  semester?: number | null;
+
   jenisSekolah: string;
   tujuanKarir: string;
   topN: number;
   dryRun: boolean;
-  semesterWeights?: string;
+  tahunAjaran: string;
+  semesterWeights?: string | Record<number, number>;
 }
 
 export function normalizeImportNilaiOptions(
@@ -29,27 +38,63 @@ export function normalizeImportNilaiOptions(
   const currentYear = now.getFullYear();
   const nextYear = currentYear + 1;
 
+  const topN = toOptionalNumber(dto.topN);
+
   return {
     sekolahId: toOptionalNumber(dto.sekolahId),
     jurusanId: toOptionalNumber(dto.jurusanId),
-    tahunAjaran: dto.tahunAjaran || `${currentYear}/${nextYear}`,
-    jurusan: dto.jurusan,
-    jenisSekolah: dto.jenisSekolah || 'SMA',
-    tujuanKarir: dto.tujuanKarir || 'kuliah',
-    topN: toOptionalNumber(dto.topN) || 3,
+
+    jurusan: cleanOptionalString(dto.jurusan),
+
+    semester: toOptionalNumber(dto.semester),
+
+    tahunAjaran:
+      cleanOptionalString(dto.tahunAjaran) || `${currentYear}/${nextYear}`,
+
+    jenisSekolah:
+      cleanOptionalString(dto.jenisSekolah)?.toUpperCase() || 'SMA',
+
+    tujuanKarir:
+      cleanOptionalString(dto.tujuanKarir) || 'kuliah',
+
+    topN: topN && topN > 0 ? topN : 3,
+
     dryRun: parseBoolean(dto.dryRun),
-    semesterWeights: dto.semesterWeights,
+
+    semesterWeights: dto.semesterWeights ?? undefined,
   };
 }
 
-function toOptionalNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === '') return undefined;
+function toOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function cleanOptionalString(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const cleaned = String(value).trim();
+
+  return cleaned || undefined;
 }
 
 function parseBoolean(value: unknown): boolean {
-  if (typeof value === 'boolean') return value;
-  if (value === null || value === undefined) return false;
-  return ['true', '1', 'yes', 'ya'].includes(String(value).toLowerCase());
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value === null || value === undefined || value === '') {
+    return false;
+  }
+
+  return ['true', '1', 'yes', 'ya', 'y'].includes(
+    String(value).trim().toLowerCase(),
+  );
 }
