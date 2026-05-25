@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
 import * as bcrypt from 'bcrypt';
-
+import { MataPelajaranService } from '../mata_pelajaran/mata_pelajaran.service';
 import { User } from '../user/entities/user.entity';
 import { Siswa } from '../siswa/entities/siswa.entity';
 import { Semester } from '../semester/entities/semester.entity';
@@ -18,6 +18,7 @@ import { Jurusan } from '../jurusan/entities/jurusan.entity';
 import { NilaiSiswa } from './entities/nilai_siswa.entity';
 import { NilaiKategoriSiswa } from './entities/nilai_kategori_siswa.entity';
 import { normalizeImportNilaiOptions } from './dto/import-nilai-excel.dto';
+import * as ExcelJS from 'exceljs';
 import type {
   ImportNilaiExcelDto,
   ImportNilaiExcelOptions,
@@ -166,12 +167,12 @@ interface PersistedImportResult {
 }
 
 @Injectable()
-export class NilaiSiswaService {
+export class NilaiSiswaService {   // ← pastikan ada 'export'
   constructor(
     private readonly dataSource: DataSource,
-
     @InjectRepository(NilaiKategoriSiswa)
     private readonly kategoriRepo: Repository<NilaiKategoriSiswa>,
+    private readonly mataPelajaranService: MataPelajaranService, // ← pastikan ini ada
   ) {}
 
   async importExcel(
@@ -1111,5 +1112,17 @@ export class NilaiSiswaService {
       row.rincian_semester = detail;
       await repo.save(row);
     }
+  }
+
+  async getTemplateNilaiByJurusan(jurusanId: number): Promise<Buffer> {
+    const mapelList = await this.mataPelajaranService.findAllByJurusan(jurusanId);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Template Nilai');
+    const headers = ['NISN', 'Nama Siswa', 'Kelas', ...mapelList.map(m => m.nama_mapel)];
+    sheet.addRow(headers);
+    sheet.addRow(['1234567890', 'Contoh Siswa', 'X', ...mapelList.map(() => '')]);
+    sheet.columns.forEach(col => { col.width = 20; });
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 }

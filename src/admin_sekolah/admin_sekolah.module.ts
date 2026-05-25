@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AdminSekolahController } from './admin_sekolah.controller';
 import { AdminSekolahService } from './admin_sekolah.service';
+import { MataPelajaranModule } from '../mata_pelajaran/mata_pelajaran.module';
 
 import { User } from '../user/entities/user.entity';
 import { Guru } from '../guru/entities/guru.entity';
@@ -18,6 +19,7 @@ import { Siswa } from '../siswa/entities/siswa.entity';
     TypeOrmModule.forFeature([User, Guru, Sekolah, Jurusan, Siswa]),
     SiswaModule,
     NilaiSiswaModule,
+    MataPelajaranModule,
   ],
   controllers: [AdminSekolahController],
   providers: [AdminSekolahService],

@@ -12,6 +12,7 @@ import { NilaiKategoriSiswa } from './entities/nilai_kategori_siswa.entity';
 import { NilaiSiswa } from './entities/nilai_siswa.entity';
 import { NilaiSiswaController } from './nilai_siswa.controller';
 import { NilaiSiswaService } from './nilai_siswa.service';
+import { MataPelajaranModule } from '../mata_pelajaran/mata_pelajaran.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { NilaiSiswaService } from './nilai_siswa.service';
       Sekolah,
       Jurusan,
     ]),
+    MataPelajaranModule, 
   ],
   controllers: [NilaiSiswaController],
   providers: [NilaiSiswaService],
