@@ -41,6 +41,11 @@ export class PrestasiSiswaService {
         penyelenggara: this.optionalText(dto.penyelenggara),
         keterangan: this.optionalText(dto.keterangan),
         bukti_url: this.optionalText(dto.bukti_url),
+        level_key: this.optionalKey(dto.level_key),
+        rank_key: this.optionalKey(dto.rank_key),
+        type_key: this.optionalKey(dto.type_key),
+        mapped_key: this.optionalKey(dto.mapped_key ?? dto.type_key),
+        kategori_hint: this.optionalKey(dto.kategori_hint),
       }),
     );
 
@@ -90,6 +95,17 @@ export class PrestasiSiswaService {
     if (patch.penyelenggara !== undefined) row.penyelenggara = this.optionalText(patch.penyelenggara);
     if (patch.keterangan !== undefined) row.keterangan = this.optionalText(patch.keterangan);
     if (patch.bukti_url !== undefined) row.bukti_url = this.optionalText(patch.bukti_url);
+    if (patch.level_key !== undefined) row.level_key = this.optionalKey(patch.level_key);
+    if (patch.rank_key !== undefined) row.rank_key = this.optionalKey(patch.rank_key);
+    if (patch.type_key !== undefined) row.type_key = this.optionalKey(patch.type_key);
+    if (patch.mapped_key !== undefined) row.mapped_key = this.optionalKey(patch.mapped_key);
+    if (patch.kategori_hint !== undefined) row.kategori_hint = this.optionalKey(patch.kategori_hint);
+
+    /**
+     * Kalau frontend baru hanya mengirim type_key, mapped_key minimal ikut type_key.
+     * Untuk akurasi terbaik, frontend bisa mengisi mapped_key dari prestasi_type_weights.
+     */
+    if (!row.mapped_key && row.type_key) row.mapped_key = row.type_key;
 
     const saved = await this.prestasiRepo.save(row);
 
@@ -160,6 +176,14 @@ export class PrestasiSiswaService {
 
   private optionalText(value: unknown) {
     const text = String(value ?? '').trim();
+    return text || null;
+  }
+
+  private optionalKey(value: unknown) {
+    const text = String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
     return text || null;
   }
 }

@@ -23,6 +23,19 @@ export class RecommendationRun {
   @JoinColumn({ name: 'id_siswa' })
   siswa!: Siswa;
 
+  /**
+   * Kode unik run agar setiap proses SPK menjadi histori baru,
+   * bukan menimpa proses lama.
+   */
+  @Column({ type: 'varchar', length: 80, nullable: true, unique: true })
+  run_code!: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  payload_hash!: string | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  engine_version!: string | null;
+
   @Column({ type: 'varchar', length: 40 })
   tujuan_karir!: string;
 
@@ -40,6 +53,9 @@ export class RecommendationRun {
 
   @Column({ type: 'varchar', length: 30, default: 'success' })
   status!: 'success' | 'failed';
+
+  @Column({ type: 'text', nullable: true })
+  error_message!: string | null;
 
   @OneToMany(() => RecommendationResult, (result) => result.run)
   results!: RecommendationResult[];

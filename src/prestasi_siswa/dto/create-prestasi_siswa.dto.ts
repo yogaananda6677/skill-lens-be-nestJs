@@ -17,6 +17,7 @@ export class CreatePrestasiSiswaDto {
   @MaxLength(10)
   tahun?: string | null;
 
+  /** Kolom lama, masih boleh dipakai untuk tampilan. */
   @IsOptional()
   @IsString()
   @MaxLength(50)
@@ -35,4 +36,30 @@ export class CreatePrestasiSiswaDto {
   @IsString()
   @MaxLength(255)
   bukti_url?: string | null;
+
+  /** Field terstruktur untuk engine SPK. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  level_key?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  rank_key?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  type_key?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  mapped_key?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  kategori_hint?: string | null;
 }

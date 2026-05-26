@@ -5,7 +5,7 @@ import { SiswaTag } from '../../siswa_tag/entities/siswa_tag.entity';
 export type MasterTagTipe = 'minat' | 'bakat' | 'hobi' | 'pengalaman' | 'prestasi';
 
 @Entity('master_tags')
-@Unique(['tipe', 'mapped_key'])
+@Unique(['tipe', 'label'])
 export class MasterTag {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -16,6 +16,13 @@ export class MasterTag {
   @Column({ type: 'varchar', length: 150 })
   label!: string;
 
+  /**
+   * mapped_key adalah kunci resmi SPK.
+   * Nilainya boleh sama untuk beberapa label, misalnya:
+   * - label: Desain UI, mapped_key: ui ux
+   * - label: Figma, mapped_key: ui ux
+   * Karena itu mapped_key TIDAK boleh dijadikan unique bersama tipe.
+   */
   @Column({ type: 'varchar', length: 120 })
   mapped_key!: string;
 

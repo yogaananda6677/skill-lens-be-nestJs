@@ -24,6 +24,16 @@ export class RecommendationResult {
   @Column({ type: 'int', default: 0 })
   rank_order!: number;
 
+  @Column({ type: 'int', nullable: true })
+  alternative_id!: number | null;
+
+  /**
+   * roadmap_id wajib datang dari SPK/DB mapping.
+   * Jangan fallback ke alternative_id karena relasinya bisa berbeda.
+   */
+  @Column({ type: 'int', nullable: true })
+  roadmap_id!: number | null;
+
   @Column({ type: 'varchar', length: 180 })
   alternative_name!: string;
 

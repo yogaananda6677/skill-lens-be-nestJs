@@ -13,22 +13,75 @@ function env(name: string, fallback = '') {
 }
 
 function assertSafeSeed(sqlText: string) {
+  /**
+   * ALTER TABLE, DROP TABLE, DROP PROCEDURE tetap diizinkan
+   * karena migration/seed kamu memang butuh itu.
+   */
   const blocked = [
     'DROP DATABASE',
-    'DROP TABLE',
+    'CREATE DATABASE',
     'TRUNCATE',
     'DELETE FROM',
-    'ALTER TABLE',
-    'CREATE DATABASE',
   ];
 
   const upper = sqlText.toUpperCase();
 
   for (const keyword of blocked) {
     if (upper.includes(keyword)) {
-      throw new Error(`Seed dibatalkan karena SQL mengandung perintah berbahaya: ${keyword}`);
+      throw new Error(
+        `Seed dibatalkan karena SQL mengandung perintah berbahaya: ${keyword}`,
+      );
     }
   }
+}
+
+function splitSqlStatements(sqlText: string): string[] {
+  const statements: string[] = [];
+
+  let delimiter = ';';
+  let buffer = '';
+
+  const lines = sqlText.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.toUpperCase().startsWith('DELIMITER ')) {
+      const pending = buffer.trim();
+
+      if (pending) {
+        statements.push(pending);
+        buffer = '';
+      }
+
+      delimiter = trimmed.substring('DELIMITER '.length).trim();
+      continue;
+    }
+
+    buffer += line + '\n';
+
+    if (buffer.trimEnd().endsWith(delimiter)) {
+      const statement = buffer.trimEnd().slice(0, -delimiter.length).trim();
+
+      if (statement) {
+        statements.push(statement);
+      }
+
+      buffer = '';
+    }
+  }
+
+  const rest = buffer.trim();
+
+  if (rest) {
+    statements.push(rest);
+  }
+
+  return statements.filter((statement) => {
+    const clean = statement.trim();
+
+    return clean && !clean.startsWith('--');
+  });
 }
 
 async function main() {
@@ -49,12 +102,28 @@ async function main() {
     password,
     database,
     charset: 'utf8mb4',
-    multipleStatements: true,
+    multipleStatements: false,
   });
 
   try {
     console.log(`[SEED] Connected to ${database}`);
-    await connection.query(sqlText);
+
+    const statements = splitSqlStatements(sqlText);
+
+    console.log(`[SEED] Menjalankan ${statements.length} statement...`);
+
+    for (let i = 0; i < statements.length; i++) {
+      const statement = statements[i];
+
+      try {
+        await connection.query(statement);
+      } catch (error) {
+        console.error(`[SEED] Error pada statement ke-${i + 1}:`);
+        console.error(statement.slice(0, 800));
+        throw error;
+      }
+    }
+
     console.log('[SEED] SkillLens seed selesai dijalankan.');
   } finally {
     await connection.end();
