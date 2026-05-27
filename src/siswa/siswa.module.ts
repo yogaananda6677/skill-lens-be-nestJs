@@ -15,10 +15,12 @@ import { SiswaProfileService } from './services/siswa-profile.service';
 import { SiswaSpkService } from './services/siswa-spk.service';
 import { SiswaService } from './siswa.service';
 import { PrestasiSiswa } from '../prestasi_siswa/entities/prestasi_siswa.entity';
+import { AiModule } from 'src/ai/ai.module';
 
 @Module({
   imports: [
     RecommendationsModule,
+    AiModule,
     TypeOrmModule.forFeature([
       Siswa,
       User,

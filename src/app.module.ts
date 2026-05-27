@@ -25,6 +25,7 @@ import { SiswaModule } from './siswa/siswa.module';
 import { SuperadminModule } from './superadmin/superadmin.module';
 import { UserModule } from './user/user.module';
 import { PrestasiSiswaModule } from './prestasi_siswa/prestasi_siswa.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { PrestasiSiswaModule } from './prestasi_siswa/prestasi_siswa.module';
     RoadmapsModule,
     SeederModule,
     PrestasiSiswaModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
