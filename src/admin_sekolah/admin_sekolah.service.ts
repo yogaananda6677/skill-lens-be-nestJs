@@ -562,6 +562,7 @@ export class AdminSekolahService {
 
     const keyword = this.clean(query?.keyword);
     const idJurusan = Number(query?.id_jurusan ?? 0);
+    const kelas = this.clean(query?.kelas);
 
     const qb = this.siswaRepo
       .createQueryBuilder('siswa')
@@ -584,6 +585,12 @@ export class AdminSekolahService {
       });
     }
 
+    if (kelas) {
+      qb.andWhere('siswa.kelas = :kelas', {
+        kelas,
+      });
+    }
+
     const [rows, total] = await qb
       .orderBy('siswa.id_siswa', 'DESC')
       .skip(skip)
@@ -601,7 +608,6 @@ export class AdminSekolahService {
         nisn: siswa.nisn,
         nama: siswa.user?.nama ?? '-',
         username: siswa.user?.username ?? '-',
-        password_awal: siswa.nisn,
         kelas: siswa.kelas,
         jurusan: siswa.jurusan_detail?.nama_jurusan || siswa.jurusan || '-',
         id_jurusan: siswa.id_jurusan,

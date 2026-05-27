@@ -35,6 +35,12 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   password!: string;
 
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  password_reset_otp!: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  password_reset_otp_expires_at!: Date | null;
+  
   @Column({
     type: 'enum',
     enum: ['superadmin', 'admin', 'admin_sekolah', 'guru', 'siswa'],

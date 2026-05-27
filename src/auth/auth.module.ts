@@ -3,12 +3,16 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import type { JwtModuleOptions } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+
 import { User } from '../user/entities/user.entity';
 import { Guru } from '../guru/entities/guru.entity';
+
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { getJwtExpiresIn, getJwtSecret } from './jwt.config';
 import { JwtStrategy } from './jwt.strategy';
+
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -24,6 +28,7 @@ import { JwtStrategy } from './jwt.strategy';
         },
       }),
     }),
+    MailModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
