@@ -100,6 +100,11 @@ export class AdminSekolahController {
     );
   }
 
+  @Post('mata-pelajaran/default-umum')
+  createDefaultMataPelajaranUmum(@Req() req: any) {
+    return this.adminSekolahService.createDefaultMataPelajaranUmum(req.user.id);
+  }
+
   @Get('siswa')
   listSiswa(@Req() req: any, @Query() query: any) {
     return this.adminSekolahService.listSiswa(req.user.id, query);
@@ -113,7 +118,7 @@ export class AdminSekolahController {
     @Body() body: any,
   ) {
     if (!file) {
-      throw new BadRequestException('File Excel siswa wajib diunggah.');
+      throw new BadRequestException('File Excel nilai wajib diunggah.');
     }
 
     const sekolah = await this.adminSekolahService.getApprovedSchoolOrFail(
@@ -123,19 +128,44 @@ export class AdminSekolahController {
     const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
     const isSma = jenisSekolah === 'SMA';
 
+    const isMultiSemester =
+      String(body?.multi_semester ?? body?.multiSemester ?? '').toLowerCase() ===
+      'true';
+
+    const mode =
+      String(body?.mode || '').trim() ||
+      (isSma ? 'sma_multi_jurusan' : 'smk_multi_sheet');
+
+    if (isMultiSemester) {
+      return this.nilaiSiswaService.importExcel(file, {
+        sekolahId: sekolah.id_sekolah,
+        jurusanId: null,
+        semester: null,
+        jenisSekolah,
+        tujuanKarir: 'kuliah',
+        topN: 3,
+        dryRun: false,
+
+        // Mode baru: backend baca semua sheet Excel.
+        multiSemester: true,
+        mode,
+        semesterStart: Number(body?.semester_start ?? body?.semesterStart ?? 1),
+        semesterEnd: Number(body?.semester_end ?? body?.semesterEnd ?? 5),
+      } as any);
+    }
+
+    /**
+     * Fallback mode lama.
+     * Ini tetap disimpan supaya endpoint lama tidak langsung rusak,
+     * tapi frontend baru seharusnya selalu mengirim multi_semester=true.
+     */
     const semester = Number(body?.semester ?? 0);
 
-    const isSemesterUmumSma =
-      isSma && (semester === 1 || semester === 2);
-
-    const isSemesterJurusanSma =
-      isSma && [3, 4, 5, 6].includes(semester);
+    const isSemesterUmumSma = isSma && (semester === 1 || semester === 2);
+    const isSemesterJurusanSma = isSma && [3, 4, 5, 6].includes(semester);
 
     const idJurusan = Number(
-      body?.id_jurusan ??
-        body?.idJurusan ??
-        body?.jurusanId ??
-        0,
+      body?.id_jurusan ?? body?.idJurusan ?? body?.jurusanId ?? 0,
     );
 
     if (isSma && ![1, 2, 3, 4, 5, 6].includes(semester)) {
@@ -164,7 +194,7 @@ export class AdminSekolahController {
       tujuanKarir: 'kuliah',
       topN: 3,
       dryRun: false,
-    });
+    } as any);
   }
 
   @Get('nilai/template')
@@ -172,6 +202,10 @@ export class AdminSekolahController {
     @Req() req: any,
     @Query('jurusanId') jurusanId: string,
     @Query('semester') semester: string,
+    @Query('multiSemester') multiSemester: string,
+    @Query('mode') mode: string,
+    @Query('semesterStart') semesterStart: string,
+    @Query('semesterEnd') semesterEnd: string,
     @Res() res: Response,
   ) {
     const sekolah = await this.adminSekolahService.getApprovedSchoolOrFail(
@@ -181,45 +215,71 @@ export class AdminSekolahController {
     const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
     const isSma = jenisSekolah === 'SMA';
 
-    const semesterNumber = Number(semester ?? 0);
-    const idJurusan = Number(jurusanId ?? 0);
+    const isMultiSemester =
+      String(multiSemester ?? '').toLowerCase() === 'true';
 
-    const isSemesterUmumSma =
-      isSma && (semesterNumber === 1 || semesterNumber === 2);
+    let buffer: Buffer;
+    let filename: string;
 
-    const isSemesterJurusanSma =
-      isSma && [3, 4, 5, 6].includes(semesterNumber);
-
-    if (isSma && ![1, 2, 3, 4, 5, 6].includes(semesterNumber)) {
-      throw new BadRequestException(
-        'Semester wajib dipilih untuk template SMA.',
-      );
-    }
-
-    if (!isSma && !idJurusan) {
-      throw new BadRequestException('Jurusan wajib dipilih untuk template SMK.');
-    }
-
-    if (isSemesterJurusanSma && !idJurusan) {
-      throw new BadRequestException(
-        'Jurusan wajib dipilih untuk template SMA semester 3 sampai 6.',
-      );
-    }
-
-    const buffer = await this.nilaiSiswaService.getTemplateNilaiByJurusan(
-      isSemesterUmumSma ? null : idJurusan,
-      {
-        semester: isSma ? semesterNumber : null,
-        jenisSekolah,
+    if (isMultiSemester) {
+      buffer = await this.nilaiSiswaService.getTemplateNilaiMultiSheet({
         sekolahId: sekolah.id_sekolah,
-      },
-    );
+        jenisSekolah,
+        mode: mode || (isSma ? 'sma_multi_jurusan' : 'smk_multi_sheet'),
+        semesterStart: Number(semesterStart || 1),
+        semesterEnd: Number(semesterEnd || 5),
+      } as any);
 
-    const filename = isSma
-      ? isSemesterUmumSma
-        ? `template_nilai_sma_semester_${semesterNumber}_umum.xlsx`
-        : `template_nilai_sma_semester_${semesterNumber}_jurusan_${idJurusan}.xlsx`
-      : `template_nilai_smk_jurusan_${idJurusan}.xlsx`;
+      filename = isSma
+        ? 'template_nilai_sma_multi_semester.xlsx'
+        : 'template_nilai_smk_multi_sheet.xlsx';
+    } else {
+      /**
+       * Fallback mode lama.
+       * Frontend baru tidak memakai mode ini, tapi tetap aman untuk kompatibilitas.
+       */
+      const semesterNumber = Number(semester ?? 0);
+      const idJurusan = Number(jurusanId ?? 0);
+
+      const isSemesterUmumSma =
+        isSma && (semesterNumber === 1 || semesterNumber === 2);
+
+      const isSemesterJurusanSma =
+        isSma && [3, 4, 5, 6].includes(semesterNumber);
+
+      if (isSma && ![1, 2, 3, 4, 5, 6].includes(semesterNumber)) {
+        throw new BadRequestException(
+          'Semester wajib dipilih untuk template SMA.',
+        );
+      }
+
+      if (!isSma && !idJurusan) {
+        throw new BadRequestException(
+          'Jurusan wajib dipilih untuk template SMK.',
+        );
+      }
+
+      if (isSemesterJurusanSma && !idJurusan) {
+        throw new BadRequestException(
+          'Jurusan wajib dipilih untuk template SMA semester 3 sampai 6.',
+        );
+      }
+
+      buffer = await this.nilaiSiswaService.getTemplateNilaiByJurusan(
+        isSemesterUmumSma ? null : idJurusan,
+        {
+          semester: isSma ? semesterNumber : null,
+          jenisSekolah,
+          sekolahId: sekolah.id_sekolah,
+        },
+      );
+
+      filename = isSma
+        ? isSemesterUmumSma
+          ? `template_nilai_sma_semester_${semesterNumber}_umum.xlsx`
+          : `template_nilai_sma_semester_${semesterNumber}_jurusan_${idJurusan}.xlsx`
+        : `template_nilai_smk_jurusan_${idJurusan}.xlsx`;
+    }
 
     res.setHeader(
       'Content-Type',

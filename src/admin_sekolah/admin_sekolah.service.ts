@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { IsNull } from 'typeorm';
 
 import { User } from '../user/entities/user.entity';
 import { Guru } from '../guru/entities/guru.entity';
@@ -848,6 +849,66 @@ export class AdminSekolahService {
 
     return {
       message: 'Mata pelajaran berhasil dihapus.',
+    };
+  }
+
+  async createDefaultMataPelajaranUmum(userId: number) {
+    const sekolah = await this.getApprovedSchoolOrFail(userId);
+
+    const defaultMapelUmum = [
+      'Bahasa Indonesia',
+      'Bahasa Daerah',
+      'Bahasa Inggris',
+      'Pendidikan Pancasila dan Kewarganegaraan',
+      'Pendidikan Agama',
+      'PJOK',
+      'Seni Budaya',
+    ];
+
+    const semesters = [1, 2, 3, 4, 5, 6];
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const semester of semesters) {
+      for (const namaMapel of defaultMapelUmum) {
+        const existing = await this.mataPelajaranRepo.findOne({
+          where: {
+            nama_mapel: namaMapel,
+            semester,
+            id_sekolah: sekolah.id_sekolah,
+            tipe_mapel: 'umum',
+            id_jurusan: IsNull(),
+          },
+        });
+
+        if (existing) {
+          skipped += 1;
+          continue;
+        }
+
+        await this.mataPelajaranRepo.save(
+          this.mataPelajaranRepo.create({
+            nama_mapel: namaMapel,
+            semester,
+            tipe_mapel: 'umum',
+            id_jurusan: null,
+            id_sekolah: sekolah.id_sekolah,
+            is_default: false,
+          }),
+        );
+
+        created += 1;
+      }
+    }
+
+    return {
+      message:
+        created > 0
+          ? `${created} mata pelajaran umum berhasil ditambahkan. ${skipped} data dilewati karena sudah ada.`
+          : 'Semua mata pelajaran umum sudah tersedia.',
+      created,
+      skipped,
     };
   }
 
