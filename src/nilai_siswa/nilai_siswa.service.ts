@@ -240,7 +240,7 @@ export class NilaiSiswaService {
       (dto as any)?.semesterStart ?? (dto as any)?.semester_start ?? 1,
     );
     (options as any).semesterEnd = Number(
-      (dto as any)?.semesterEnd ?? (dto as any)?.semester_end ?? 5,
+      (dto as any)?.semesterEnd ?? (dto as any)?.semester_end ?? 6,
     );
 
     const selectedSemester = this.normalizeIncomingSemester(dto);
@@ -425,6 +425,7 @@ export class NilaiSiswaService {
           'Semester 3',
           'Semester 4',
           'Semester 5',
+          'Semester 6',
         ],
         alur_import_database: [
           'Data siswa dibuat/diperbarui lebih dulu berdasarkan NISN.',
@@ -492,7 +493,7 @@ export class NilaiSiswaService {
         sheetJurusan = meta.jurusan || '';
 
         const semesterStart = Number((options as any).semesterStart || 1);
-        const semesterEnd = Number((options as any).semesterEnd || 5);
+        const semesterEnd = Number((options as any).semesterEnd || 6);
 
         if (semester < semesterStart || semester > semesterEnd) {
           return;
@@ -690,8 +691,12 @@ export class NilaiSiswaService {
 
     student.nama = student.nama || nama.trim();
     student.jk = student.jk || extra.jk;
-    student.kelas = student.kelas || extra.kelas;
-    student.jurusan = student.jurusan || extra.jurusan;
+    student.kelas = this.pickLatestKelas(student.kelas, extra.kelas);
+    student.jurusan =
+      this.cleanImportJurusan(extra.jurusan) ||
+      this.cleanImportJurusan(student.jurusan) ||
+      student.jurusan ||
+      extra.jurusan;
 
     return student;
   }
@@ -745,6 +750,11 @@ export class NilaiSiswaService {
     semesterWeights: Record<number, number>,
     options: ImportNilaiExcelOptions,
   ): StudentAcademicResult {
+    const latestSemester = this.getLatestStudentSemester(student);
+    const finalKelas = this.getKelasBySemester(latestSemester);
+    const finalJurusan =
+      options.jurusan || this.getLatestStudentJurusan(student) || student.jurusan || '-';
+
     const nilaiAkademik = emptyAcademicScores();
 
     const rincianPerKategori = NILAI_AKADEMIK_CATEGORIES.reduce(
@@ -819,8 +829,8 @@ export class NilaiSiswaService {
       nisn: student.nisn,
       nama: student.nama,
       jk: student.jk,
-      kelas: student.kelas,
-      jurusan: options.jurusan || student.jurusan,
+      kelas: finalKelas || student.kelas || '-',
+      jurusan: finalJurusan,
       nilai_akademik: nilaiAkademik,
       rincian_per_kategori: rincianPerKategori,
       rincian_per_semester: rincianPerSemester,
@@ -829,7 +839,7 @@ export class NilaiSiswaService {
         nama: student.nama,
         tujuan_karir: options.tujuanKarir,
         jenis_sekolah: options.jenisSekolah,
-        jurusan_sekolah: options.jurusan || student.jurusan || '',
+        jurusan_sekolah: finalJurusan === '-' ? '' : finalJurusan,
         top_n: options.topN,
         ...nilaiAkademik,
         minat: [],
@@ -938,6 +948,73 @@ export class NilaiSiswaService {
     };
   }
 
+
+  private getKelasBySemester(semester: number | null | undefined): string {
+    const value = Number(semester);
+
+    if ([1, 2].includes(value)) return 'X';
+    if ([3, 4].includes(value)) return 'XI';
+    if ([5, 6].includes(value)) return 'XII';
+
+    return '-';
+  }
+
+  private getKelasLevel(kelas?: string | null): number {
+    const value = String(kelas || '').trim().toUpperCase();
+
+    if (value === 'X' || value === '10' || value === 'KELAS X') return 10;
+    if (value === 'XI' || value === '11' || value === 'KELAS XI') return 11;
+    if (value === 'XII' || value === '12' || value === 'KELAS XII') return 12;
+
+    return 0;
+  }
+
+  private pickLatestKelas(
+    current?: string | null,
+    incoming?: string | null,
+  ): string | undefined {
+    const currentClean = String(current || '').trim();
+    const incomingClean = String(incoming || '').trim();
+
+    if (!currentClean) return incomingClean || undefined;
+    if (!incomingClean) return currentClean;
+
+    return this.getKelasLevel(incomingClean) > this.getKelasLevel(currentClean)
+      ? incomingClean
+      : currentClean;
+  }
+
+  private getLatestStudentSemester(student: StudentAccumulator): number {
+    const semesters = student.rawGrades
+      .map((grade) => Number(grade.semester))
+      .filter((semester) => Number.isFinite(semester) && semester > 0);
+
+    return semesters.length ? Math.max(...semesters) : 0;
+  }
+
+  private cleanImportJurusan(value?: string | null): string {
+    const jurusan = String(value || '').trim();
+
+    if (!jurusan || jurusan === '-' || jurusan.toLowerCase() === 'umum') {
+      return '';
+    }
+
+    return jurusan.toUpperCase();
+  }
+
+  private getLatestStudentJurusan(student: StudentAccumulator): string {
+    const latestGradeWithJurusan = [...student.rawGrades]
+      .sort((a, b) => b.semester - a.semester)
+      .find(
+        (grade) =>
+          grade.semester >= 3 && this.cleanImportJurusan(grade.jurusan),
+      );
+
+    return this.cleanImportJurusan(
+      latestGradeWithJurusan?.jurusan || student.jurusan,
+    );
+  }
+
   private async findOrCreateSiswa(
     manager: EntityManager,
     student: StudentAccumulator,
@@ -951,6 +1028,10 @@ export class NilaiSiswaService {
     const userRepo = manager.getRepository(User);
     const jurusanRepo = manager.getRepository(Jurusan);
 
+    const latestSemester = this.getLatestStudentSemester(student);
+    const kelasImport = this.getKelasBySemester(latestSemester);
+    const jurusanImportFromSheet = this.getLatestStudentJurusan(student);
+
     let siswa = await siswaRepo.findOne({
       where: {
         nisn: student.nisn,
@@ -958,13 +1039,20 @@ export class NilaiSiswaService {
       relations: ['user', 'jurusan_detail'],
     });
 
-    const jurusanDetail = options.jurusanId
-      ? await jurusanRepo.findOne({
-          where: {
-            id_jurusan: options.jurusanId,
-          },
-        })
-      : null;
+    let jurusanDetail: Jurusan | null = null;
+
+    if (options.jurusanId) {
+      jurusanDetail = await jurusanRepo.findOne({
+        where: {
+          id_jurusan: options.jurusanId,
+        },
+      });
+    } else if (jurusanImportFromSheet) {
+      jurusanDetail = await this.getJurusanByName(
+        jurusanImportFromSheet,
+        options.sekolahId,
+      );
+    }
 
     if (options.jurusanId && !jurusanDetail) {
       throw new BadRequestException('Jurusan yang dipilih tidak ditemukan.');
@@ -981,7 +1069,10 @@ export class NilaiSiswaService {
     }
 
     const importJurusanName =
-      jurusanDetail?.nama_jurusan || options.jurusan || '-';
+      jurusanDetail?.nama_jurusan ||
+      jurusanImportFromSheet ||
+      options.jurusan ||
+      '-';
 
     let akunBaru = false;
     let username = siswa?.user?.username || '';
@@ -1009,6 +1100,8 @@ export class NilaiSiswaService {
             username,
             password,
             role: 'siswa',
+            id_sekolah: options.sekolahId ?? null,
+            must_change_password: 1,
           }),
         );
 
@@ -1016,13 +1109,15 @@ export class NilaiSiswaService {
       } else {
         username = user.username;
         user.nama = student.nama || user.nama;
+        user.id_sekolah = options.sekolahId ?? user.id_sekolah ?? null;
+        user.must_change_password = user.must_change_password ?? 1;
         await userRepo.save(user);
       }
 
       siswa = await siswaRepo.save(
         siswaRepo.create({
           nisn: student.nisn,
-          kelas: student.kelas || '-',
+          kelas: kelasImport,
           jurusan: importJurusanName,
           id_sekolah: options.sekolahId ?? null,
           sekolah: options.sekolahId
@@ -1036,7 +1131,7 @@ export class NilaiSiswaService {
 
       stats.siswa_dibuat += 1;
     } else {
-      siswa.kelas = student.kelas || siswa.kelas || '-';
+      siswa.kelas = kelasImport || siswa.kelas || '-';
       siswa.jurusan = importJurusanName || siswa.jurusan || '-';
       siswa.id_sekolah = options.sekolahId ?? siswa.id_sekolah ?? null;
       siswa.sekolah = options.sekolahId
@@ -1051,6 +1146,7 @@ export class NilaiSiswaService {
 
       if (siswa.user) {
         siswa.user.nama = student.nama || siswa.user.nama;
+        siswa.user.id_sekolah = options.sekolahId ?? siswa.user.id_sekolah ?? null;
         await userRepo.save(siswa.user);
       }
 
@@ -1670,7 +1766,7 @@ async getTemplateNilaiMultiSheet(options: {
   const isSma = jenisSekolah === 'SMA';
   const sekolahId = options?.sekolahId ?? null;
   const semesterStart = Number(options?.semesterStart || 1);
-  const semesterEnd = Number(options?.semesterEnd || 5);
+  const semesterEnd = Number(options?.semesterEnd || 6);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'SkillLens';
