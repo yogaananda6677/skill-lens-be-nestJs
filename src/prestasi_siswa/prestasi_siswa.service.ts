@@ -5,6 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
+import { extname, join } from 'path';
 import { Repository } from 'typeorm';
 
 import { UserRole } from '../user/entities/user.entity';
@@ -19,6 +22,8 @@ type CurrentUser = {
   id_sekolah?: number | null;
 };
 
+const MAX_PRESTASI_PER_SISWA = 4;
+
 @Injectable()
 export class PrestasiSiswaService {
   constructor(
@@ -29,8 +34,27 @@ export class PrestasiSiswaService {
     private readonly siswaRepo: Repository<Siswa>,
   ) {}
 
-  async create(dto: CreatePrestasiSiswaDto, user: CurrentUser) {
+  async create(
+    dto: CreatePrestasiSiswaDto,
+    user: CurrentUser,
+    file?: any,
+    baseUrl?: string,
+  ) {
     const idSiswa = await this.resolveTargetSiswaId(dto.id_siswa, user);
+
+    const totalPrestasi = await this.prestasiRepo.count({
+      where: { id_siswa: idSiswa },
+    });
+
+    if (totalPrestasi >= MAX_PRESTASI_PER_SISWA) {
+      throw new BadRequestException(
+        `Maksimal hanya ${MAX_PRESTASI_PER_SISWA} prestasi per siswa.`,
+      );
+    }
+
+    const evidenceUrl = file
+      ? await this.saveEvidenceFile(file, baseUrl)
+      : this.optionalText(dto.bukti_url);
 
     const row = await this.prestasiRepo.save(
       this.prestasiRepo.create({
@@ -40,7 +64,7 @@ export class PrestasiSiswaService {
         tingkat: this.optionalText(dto.tingkat),
         penyelenggara: this.optionalText(dto.penyelenggara),
         keterangan: this.optionalText(dto.keterangan),
-        bukti_url: this.optionalText(dto.bukti_url),
+        bukti_url: evidenceUrl,
         level_key: this.optionalKey(dto.level_key),
         rank_key: this.optionalKey(dto.rank_key),
         type_key: this.optionalKey(dto.type_key),
@@ -172,6 +196,39 @@ export class PrestasiSiswaService {
       throw new BadRequestException(`${label} wajib diisi.`);
     }
     return text;
+  }
+
+  private async saveEvidenceFile(file: any, baseUrl?: string) {
+    if (!file?.buffer?.length) return null;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Bukti prestasi harus berupa JPG, PNG, WEBP, atau PDF.',
+      );
+    }
+
+    const extension = this.safeFileExtension(file.originalname, file.mimetype);
+    const filename = `${Date.now()}-${randomUUID()}${extension}`;
+    const uploadDir = join(process.cwd(), 'uploads', 'prestasi');
+
+    await mkdir(uploadDir, { recursive: true });
+    await writeFile(join(uploadDir, filename), file.buffer);
+
+    const relativeUrl = `/uploads/prestasi/${filename}`;
+    return baseUrl ? `${baseUrl}${relativeUrl}` : relativeUrl;
+  }
+
+  private safeFileExtension(originalName: string, mimetype: string) {
+    const originalExtension = extname(String(originalName || '')).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.webp', '.pdf'].includes(originalExtension)) {
+      return originalExtension;
+    }
+
+    if (mimetype === 'image/jpeg') return '.jpg';
+    if (mimetype === 'image/png') return '.png';
+    if (mimetype === 'image/webp') return '.webp';
+    return '.pdf';
   }
 
   private optionalText(value: unknown) {

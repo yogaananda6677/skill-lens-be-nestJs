@@ -1,3 +1,5 @@
+// src/mata_pelajaran/entities/mata_pelajaran.entity.ts
+
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -9,13 +11,13 @@ import {
 
 import { Jurusan } from '../../jurusan/entities/jurusan.entity';
 import { Sekolah } from '../../sekolah/entities/sekolah.entity';
+import { Semester } from '../../semester/entities/semester.entity';
 
 import { NILAI_AKADEMIK_CATEGORIES } from '../../nilai_siswa/constants/academic-categories';
-
 import type { AcademicCategory } from '../../nilai_siswa/constants/academic-categories';
 
 @Entity('mata_pelajaran')
-@Index(['nama_mapel', 'semester', 'id_jurusan', 'id_sekolah'])
+@Index(['nama_mapel', 'id_semester', 'id_jurusan', 'id_sekolah'])
 export class MataPelajaran {
   @PrimaryGeneratedColumn()
   id_mapel!: number;
@@ -48,11 +50,29 @@ export class MataPelajaran {
   })
   tipe_mapel!: 'umum' | 'jurusan';
 
+  /**
+   * Tetap disimpan supaya kompatibel dengan kode lama/frontend lama.
+   * Tapi proses baru tetap memakai id_semester sebagai acuan utama.
+   */
   @Column({
     type: 'int',
     nullable: true,
   })
   semester!: number | null;
+
+  @Column({
+    type: 'int',
+    nullable: true,
+  })
+  id_semester!: number | null;
+
+  @ManyToOne(() => Semester, {
+    nullable: true,
+  })
+  @JoinColumn({
+    name: 'id_semester',
+  })
+  semester_detail!: Semester | null;
 
   @Column({
     type: 'int',

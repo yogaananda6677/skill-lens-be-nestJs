@@ -69,6 +69,24 @@ export class AdminSekolahController {
     return this.adminSekolahService.createJurusan(req.user.id, body);
   }
 
+  @Put('jurusan/:id')
+  updateJurusan(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    return this.adminSekolahService.updateJurusan(
+      req.user.id,
+      Number(id),
+      body,
+    );
+  }
+
+  @Delete('jurusan/:id')
+  deleteJurusan(@Req() req: any, @Param('id') id: string) {
+    return this.adminSekolahService.deleteJurusan(req.user.id, Number(id));
+  }
+
   @Get('mata-pelajaran')
   listMataPelajaran(@Req() req: any) {
     return this.adminSekolahService.listMataPelajaran(req.user.id);
@@ -137,9 +155,19 @@ export class AdminSekolahController {
       (isSma ? 'sma_multi_jurusan' : 'smk_multi_sheet');
 
     if (isMultiSemester) {
+      const idJurusan = Number(
+        body?.id_jurusan ?? body?.idJurusan ?? body?.jurusanId ?? 0,
+      );
+
+      if (!isSma && !idJurusan) {
+        throw new BadRequestException(
+          'Pilih jurusan SMK terlebih dahulu sebelum import nilai.',
+        );
+      }
+
       return this.nilaiSiswaService.importExcel(file, {
         sekolahId: sekolah.id_sekolah,
-        jurusanId: null,
+        jurusanId: isSma ? null : idJurusan,
         semester: null,
         jenisSekolah,
         tujuanKarir: 'kuliah',
@@ -149,8 +177,12 @@ export class AdminSekolahController {
         // Mode baru: backend baca semua sheet Excel.
         multiSemester: true,
         mode,
-        semesterStart: Number(body?.semester_start ?? body?.semesterStart ?? 1),
-        semesterEnd: Number(body?.semester_end ?? body?.semesterEnd ?? 5),
+        semesterStart: isSma
+          ? Number(body?.semester_start ?? body?.semesterStart ?? 1)
+          : 1,
+        semesterEnd: isSma
+          ? Number(body?.semester_end ?? body?.semesterEnd ?? 6)
+          : 6,
       } as any);
     }
 
@@ -222,17 +254,26 @@ export class AdminSekolahController {
     let filename: string;
 
     if (isMultiSemester) {
+      const idJurusan = Number(jurusanId ?? 0);
+
+      if (!isSma && !idJurusan) {
+        throw new BadRequestException(
+          'Pilih jurusan SMK terlebih dahulu sebelum download template.',
+        );
+      }
+
       buffer = await this.nilaiSiswaService.getTemplateNilaiMultiSheet({
         sekolahId: sekolah.id_sekolah,
         jenisSekolah,
-        mode: mode || (isSma ? 'sma_multi_jurusan' : 'smk_multi_sheet'),
-        semesterStart: Number(semesterStart || 1),
-        semesterEnd: Number(semesterEnd || 5),
+        mode: mode || (isSma ? 'sma_multi_jurusan' : 'smk_per_jurusan'),
+        jurusanId: isSma ? null : idJurusan,
+        semesterStart: isSma ? Number(semesterStart || 1) : 1,
+        semesterEnd: isSma ? Number(semesterEnd || 6) : 6,
       } as any);
 
       filename = isSma
         ? 'template_nilai_sma_multi_semester.xlsx'
-        : 'template_nilai_smk_multi_sheet.xlsx';
+        : `template_nilai_smk_jurusan_${idJurusan}_semester_1_6.xlsx`;
     } else {
       /**
        * Fallback mode lama.

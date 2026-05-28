@@ -26,6 +26,12 @@ export class SiswaController {
   }
 
   @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
+  @Get('nilai')
+  getNilaiAkademikDetail(@Req() req: any) {
+    return this.siswaService.getNilaiAkademikDetail(req.user.id_user);
+  }
+
+  @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
   @Put('profil')
   updateProfil(@Req() req: any, @Body() body: any) {
     return this.siswaService.updateProfil(req.user.id_user, body);

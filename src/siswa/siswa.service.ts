@@ -21,6 +21,10 @@ export class SiswaService {
     return this.siswaProfileService.getMe(userId);
   }
 
+  getNilaiAkademikDetail(userId: number) {
+    return this.siswaProfileService.getNilaiAkademikDetail(userId);
+  }
+
   updateProfil(userId: number, body: any) {
     return this.siswaProfileService.updateProfil(userId, body);
   }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,14 +10,24 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoleGuard } from '../auth/role';
 import { CreatePrestasiSiswaDto } from './dto/create-prestasi_siswa.dto';
 import { UpdatePrestasiSiswaDto } from './dto/update-prestasi_siswa.dto';
 import { PrestasiSiswaService } from './prestasi_siswa.service';
+
+const ALLOWED_EVIDENCE_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+];
 
 @UseGuards(
   JwtAuthGuard,
@@ -27,8 +38,35 @@ export class PrestasiSiswaController {
   constructor(private readonly prestasiSiswaService: PrestasiSiswaService) {}
 
   @Post()
-  create(@Req() req: any, @Body() dto: CreatePrestasiSiswaDto) {
-    return this.prestasiSiswaService.create(dto, req.user);
+  @UseInterceptors(
+    FileInterceptor('bukti_file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_EVIDENCE_MIME_TYPES.includes(file.mimetype)) {
+          callback(
+            new BadRequestException(
+              'Bukti prestasi harus berupa JPG, PNG, WEBP, atau PDF.',
+            ),
+            false,
+          );
+          return;
+        }
+
+        callback(null, true);
+      },
+    }),
+  )
+  create(
+    @Req() req: any,
+    @Body() dto: CreatePrestasiSiswaDto,
+    @UploadedFile() file?: any,
+  ) {
+    return this.prestasiSiswaService.create(
+      dto,
+      req.user,
+      file,
+      this.getRequestBaseUrl(req),
+    );
   }
 
   @Get()
@@ -53,5 +91,11 @@ export class PrestasiSiswaController {
   @Delete(':id')
   remove(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     return this.prestasiSiswaService.remove(id, req.user);
+  }
+
+  private getRequestBaseUrl(req: any) {
+    const protocol = req.protocol || 'http';
+    const host = req.get?.('host') || req.headers?.host || 'localhost:3000';
+    return `${protocol}://${host}`;
   }
 }

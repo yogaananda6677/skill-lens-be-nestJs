@@ -21,6 +21,7 @@
     "seed": "ts-node -r tsconfig-paths/register src/seeder/run-seed.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.6.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -35,8 +36,8 @@
     "exceljs": "^4.4.0",
     "multer": "^2.1.1",
     "mysql2": "^3.22.3",
-    "openai": "^6.39.0",
     "nodemailer": "^8.0.9",
+    "openai": "^6.39.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",

@@ -16,11 +16,13 @@ import { SiswaSpkService } from './services/siswa-spk.service';
 import { SiswaService } from './siswa.service';
 import { PrestasiSiswa } from '../prestasi_siswa/entities/prestasi_siswa.entity';
 import { AiModule } from 'src/ai/ai.module';
+import { NilaiSiswaModule } from '../nilai_siswa/nilai_siswa.module';
 
 @Module({
   imports: [
     RecommendationsModule,
     AiModule,
+    NilaiSiswaModule,
     TypeOrmModule.forFeature([
       Siswa,
       User,

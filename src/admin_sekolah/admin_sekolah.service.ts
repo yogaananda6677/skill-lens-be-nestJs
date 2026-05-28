@@ -17,6 +17,7 @@ import { Jurusan } from '../jurusan/entities/jurusan.entity';
 import { Siswa } from '../siswa/entities/siswa.entity';
 import { NilaiSiswa } from '../nilai_siswa/entities/nilai_siswa.entity';
 import { MataPelajaran } from '../mata_pelajaran/entities/mata_pelajaran.entity';
+import { KurikulumMapel } from '../kurikulum_mapel/entities/kurikulum_mapel.entity';
 
 import { CreateAdminSchoolDto } from './dto/create-admin-school.dto';
 import { CreateAdminTeacherDto } from './dto/create-admin-teacher.dto';
@@ -58,6 +59,76 @@ export class AdminSekolahService {
 
   private cleanLower(value?: string | null) {
     return this.clean(value).toLowerCase();
+  }
+
+  private normalizeJurusanName(value?: string | null) {
+    return this.clean(value).replace(/\s+/g, ' ').toUpperCase();
+  }
+
+  private validateJurusanNameBySchoolType(
+    namaJurusan: string,
+    jenisSekolah?: string | null,
+  ) {
+    const jenis = String(jenisSekolah || 'SMA').toUpperCase();
+
+    if (jenis !== 'SMA') return;
+
+    const allowed = ['IPA', 'IPS', 'BAHASA'];
+
+    if (!allowed.includes(namaJurusan)) {
+      throw new BadRequestException(
+        'Untuk SMA, jurusan hanya boleh IPA, IPS, atau BAHASA.',
+      );
+    }
+  }
+
+  private async getJurusanUsage(idJurusan: number) {
+    const siswaCount = await this.siswaRepo.count({
+      where: {
+        id_jurusan: idJurusan,
+      },
+    });
+
+    const mapelCount = await this.mataPelajaranRepo.count({
+      where: {
+        id_jurusan: idJurusan,
+      },
+    });
+
+    const kurikulumCount = await this.dataSource
+      .getRepository(KurikulumMapel)
+      .count({
+        where: {
+          id_jurusan: idJurusan,
+        },
+      });
+
+    const total = siswaCount + mapelCount + kurikulumCount;
+
+    return {
+      siswa: siswaCount,
+      mapel: mapelCount,
+      kurikulum: kurikulumCount,
+      total,
+      is_used: total > 0,
+      can_edit: total === 0,
+      can_delete: total === 0,
+    };
+  }
+
+  private buildJurusanResponse(item: Jurusan, usage: any) {
+    return {
+      id: item.id_jurusan,
+      id_jurusan: item.id_jurusan,
+      nama: item.nama_jurusan,
+      nama_jurusan: item.nama_jurusan,
+      id_sekolah: item.id_sekolah,
+      usage,
+      usage_count: usage.total,
+      is_used: usage.is_used,
+      can_edit: usage.can_edit,
+      can_delete: usage.can_delete,
+    };
   }
 
   private normalizePhone(value?: string | null) {
@@ -313,6 +384,7 @@ export class AdminSekolahService {
         school_status: 'none' as SchoolStatus,
         id_sekolah: null,
         nama_sekolah: null,
+        jenis_sekolah: null,
         message: 'Admin sekolah belum mengajukan data sekolah.',
       };
     }
@@ -324,6 +396,7 @@ export class AdminSekolahService {
       school_status: status,
       id_sekolah: sekolah.id_sekolah,
       nama_sekolah: sekolah.nama_sekolah,
+      jenis_sekolah: sekolah.jenis_sekolah,
       message:
         status === 'approved'
           ? 'Sekolah sudah diverifikasi. Fitur guru dan import siswa sudah aktif.'
@@ -491,24 +564,27 @@ export class AdminSekolahService {
 
     const jurusan = await this.jurusanRepo.find({
       where: { id_sekolah: sekolah.id_sekolah },
-      order: { id_jurusan: 'DESC' },
+      order: { nama_jurusan: 'ASC' },
     });
+
+    const data = await Promise.all(
+      jurusan.map(async (item) => {
+        const usage = await this.getJurusanUsage(item.id_jurusan);
+        return this.buildJurusanResponse(item, usage);
+      }),
+    );
 
     return {
       message: 'Data jurusan berhasil dimuat.',
-      data: jurusan.map((item) => ({
-        id: item.id_jurusan,
-        id_jurusan: item.id_jurusan,
-        nama: item.nama_jurusan,
-        nama_jurusan: item.nama_jurusan,
-        id_sekolah: item.id_sekolah,
-      })),
+      data,
     };
   }
 
   async createJurusan(userId: number, body: any) {
     const sekolah = await this.getApprovedSchoolOrFail(userId);
-    const namaJurusan = this.clean(body?.nama_jurusan || body?.nama);
+    const namaJurusan = this.normalizeJurusanName(
+      body?.nama_jurusan || body?.nama,
+    );
 
     if (!namaJurusan) {
       throw new BadRequestException('Nama jurusan wajib diisi.');
@@ -522,14 +598,22 @@ export class AdminSekolahService {
       throw new BadRequestException('Nama jurusan maksimal 80 karakter.');
     }
 
-    const existing = await this.jurusanRepo.findOne({
-      where: {
-        nama_jurusan: namaJurusan,
-        id_sekolah: sekolah.id_sekolah,
-      },
-    });
+    this.validateJurusanNameBySchoolType(
+      namaJurusan,
+      sekolah.jenis_sekolah,
+    );
 
-    if (existing) {
+    const duplicate = await this.jurusanRepo
+      .createQueryBuilder('jurusan')
+      .where('LOWER(jurusan.nama_jurusan) = LOWER(:namaJurusan)', {
+        namaJurusan,
+      })
+      .andWhere('jurusan.id_sekolah = :idSekolah', {
+        idSekolah: sekolah.id_sekolah,
+      })
+      .getOne();
+
+    if (duplicate) {
       throw new ConflictException('Jurusan sudah ada di sekolah ini.');
     }
 
@@ -541,15 +625,122 @@ export class AdminSekolahService {
       }),
     );
 
+    const usage = await this.getJurusanUsage(jurusan.id_jurusan);
+
     return {
       message: 'Jurusan berhasil ditambahkan.',
-      data: {
-        id: jurusan.id_jurusan,
-        id_jurusan: jurusan.id_jurusan,
-        nama: jurusan.nama_jurusan,
-        nama_jurusan: jurusan.nama_jurusan,
-        id_sekolah: jurusan.id_sekolah,
+      data: this.buildJurusanResponse(jurusan, usage),
+    };
+  }
+
+  async updateJurusan(userId: number, idJurusan: number, body: any) {
+    const sekolah = await this.getApprovedSchoolOrFail(userId);
+
+    if (!idJurusan) {
+      throw new BadRequestException('ID jurusan tidak valid.');
+    }
+
+    const jurusan = await this.jurusanRepo.findOne({
+      where: {
+        id_jurusan: idJurusan,
+        id_sekolah: sekolah.id_sekolah,
       },
+    });
+
+    if (!jurusan) {
+      throw new NotFoundException('Jurusan tidak ditemukan.');
+    }
+
+    const usage = await this.getJurusanUsage(idJurusan);
+
+    if (usage.is_used) {
+      throw new BadRequestException(
+        `Jurusan ${jurusan.nama_jurusan} tidak bisa diedit karena sudah dipakai oleh ${usage.siswa} siswa, ${usage.mapel} mapel, dan ${usage.kurikulum} kurikulum mapel.`,
+      );
+    }
+
+    const namaJurusan = this.normalizeJurusanName(
+      body?.nama_jurusan || body?.nama,
+    );
+
+    if (!namaJurusan) {
+      throw new BadRequestException('Nama jurusan wajib diisi.');
+    }
+
+    if (namaJurusan.length < 2) {
+      throw new BadRequestException('Nama jurusan minimal 2 karakter.');
+    }
+
+    if (namaJurusan.length > 80) {
+      throw new BadRequestException('Nama jurusan maksimal 80 karakter.');
+    }
+
+    this.validateJurusanNameBySchoolType(
+      namaJurusan,
+      sekolah.jenis_sekolah,
+    );
+
+    const duplicate = await this.jurusanRepo
+      .createQueryBuilder('jurusan')
+      .where('LOWER(jurusan.nama_jurusan) = LOWER(:namaJurusan)', {
+        namaJurusan,
+      })
+      .andWhere('jurusan.id_sekolah = :idSekolah', {
+        idSekolah: sekolah.id_sekolah,
+      })
+      .andWhere('jurusan.id_jurusan != :idJurusan', {
+        idJurusan,
+      })
+      .getOne();
+
+    if (duplicate) {
+      throw new ConflictException('Jurusan tersebut sudah ada.');
+    }
+
+    jurusan.nama_jurusan = namaJurusan;
+
+    const saved = await this.jurusanRepo.save(jurusan);
+    const newUsage = await this.getJurusanUsage(saved.id_jurusan);
+
+    return {
+      message: 'Jurusan berhasil diperbarui.',
+      data: this.buildJurusanResponse(saved, newUsage),
+    };
+  }
+
+  async deleteJurusan(userId: number, idJurusan: number) {
+    const sekolah = await this.getApprovedSchoolOrFail(userId);
+
+    if (!idJurusan) {
+      throw new BadRequestException('ID jurusan tidak valid.');
+    }
+
+    const jurusan = await this.jurusanRepo.findOne({
+      where: {
+        id_jurusan: idJurusan,
+        id_sekolah: sekolah.id_sekolah,
+      },
+    });
+
+    if (!jurusan) {
+      throw new NotFoundException('Jurusan tidak ditemukan.');
+    }
+
+    const usage = await this.getJurusanUsage(idJurusan);
+
+    if (usage.is_used) {
+      throw new BadRequestException(
+        `Jurusan ${jurusan.nama_jurusan} tidak bisa dihapus karena sudah dipakai oleh ${usage.siswa} siswa, ${usage.mapel} mapel, dan ${usage.kurikulum} kurikulum mapel.`,
+      );
+    }
+
+    await this.jurusanRepo.delete({
+      id_jurusan: idJurusan,
+      id_sekolah: sekolah.id_sekolah,
+    });
+
+    return {
+      message: 'Jurusan berhasil dihapus.',
     };
   }
 
