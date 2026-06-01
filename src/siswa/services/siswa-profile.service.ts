@@ -467,12 +467,14 @@ export class SiswaProfileService {
         }
 
         for (const rawValue of requestedValues) {
-          const masterTag = this.resolveMasterTag(rawValue, byId, byLabel, byMappedKey);
+          const masterTag =
+            this.resolveMasterTag(rawValue, byId, byLabel, byMappedKey) ??
+            (await this.createMissingProfileMasterTag(manager, kategori, rawValue));
 
-          if (!masterTag) {
-            throw new BadRequestException(
-              `Tag "${rawValue}" tidak valid untuk kategori ${kategori}. Pilih tag dari master data.`,
-            );
+          byId.set(masterTag.id, masterTag);
+          byLabel.set(this.lookupKey(masterTag.label), masterTag);
+          if (!byMappedKey.has(this.lookupKey(masterTag.mapped_key))) {
+            byMappedKey.set(this.lookupKey(masterTag.mapped_key), masterTag);
           }
 
           await manager.save(
@@ -503,6 +505,113 @@ export class SiswaProfileService {
   }
 
 
+
+  private async createMissingProfileMasterTag(
+    manager: any,
+    tipe: Exclude<MasterTagTipe, 'prestasi'>,
+    rawValue: string,
+  ): Promise<MasterTag> {
+    const label = String(rawValue ?? '').trim();
+
+    if (!label) {
+      throw new BadRequestException('Tag profil tidak boleh kosong.');
+    }
+
+    const mappedKey = this.slugifyTag(label);
+
+    const existing = await manager
+      .getRepository(MasterTag)
+      .createQueryBuilder('tag')
+      .where('tag.tipe = :tipe', { tipe })
+      .andWhere('(LOWER(TRIM(tag.label)) = :labelKey OR LOWER(TRIM(tag.mapped_key)) = :mappedKey)', {
+        labelKey: this.lookupKey(label),
+        mappedKey: this.lookupKey(mappedKey),
+      })
+      .getOne();
+
+    if (existing) {
+      if (existing.is_active !== 1) {
+        existing.is_active = 1;
+        await manager.save(MasterTag, existing);
+      }
+
+      return existing;
+    }
+
+    const maxSortRaw = await manager
+      .getRepository(MasterTag)
+      .createQueryBuilder('tag')
+      .select('MAX(tag.sort_order)', 'max')
+      .where('tag.tipe = :tipe', { tipe })
+      .getRawOne();
+
+    const nextSort = Number(maxSortRaw?.max ?? 0) + 1;
+
+    const created = manager.create(MasterTag, {
+      tipe,
+      label,
+      mapped_key: mappedKey,
+      kategori_hint: this.guessKategoriHint(label, tipe),
+      sort_order: nextSort,
+      is_active: 1,
+    });
+
+    try {
+      return await manager.save(MasterTag, created);
+    } catch (error: any) {
+      if (error?.code === 'ER_DUP_ENTRY') {
+        const duplicated = await manager.findOne(MasterTag, {
+          where: { tipe, label } as any,
+        });
+
+        if (duplicated) return duplicated;
+      }
+
+      throw error;
+    }
+  }
+
+  private slugifyTag(value: string) {
+    return String(value ?? '')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 120) || 'profil_tag';
+  }
+
+  private guessKategoriHint(label: string, tipe: string) {
+    const text = this.lookupKey(label);
+
+    if (/(web|mobile|coding|code|program|aplikasi|game|data|database|ai|digital|tools|cloud|cyber|siber|robot|server|linux|spreadsheet|teknologi)/.test(text)) {
+      return 'teknologi';
+    }
+
+    if (/(desain|visual|gambar|foto|video|animasi|musik|seni|kreatif|film|ui|ux|figma|poster|komik)/.test(text)) {
+      return 'kreativitas';
+    }
+
+    if (/(matematika|fisika|kimia|biologi|sains|riset|logika|laboratorium|ilmiah|pola|analisis)/.test(text)) {
+      return 'sains';
+    }
+
+    if (/(bahasa|menulis|jurnalistik|komunikasi|public|speaking|presentasi|debat|story|inggris|jepang|korea|mandarin)/.test(text)) {
+      return 'bahasa';
+    }
+
+    if (/(bisnis|jual|marketing|pemasaran|akuntansi|keuangan|organisasi|osis|panitia|relawan|sosial|pelanggan|negosiasi|kepemimpinan|tim)/.test(text)) {
+      return 'sosial';
+    }
+
+    if (/(kesehatan|farmasi|gizi|keperawatan|medis|terapi|kebidanan|olahraga)/.test(text)) {
+      return 'sains';
+    }
+
+    if (tipe === 'bakat') return 'softskill';
+
+    return 'softskill';
+  }
 
   private parseSemesterNumber(value?: string | number | null) {
     const match = String(value ?? '').match(/\d+/);

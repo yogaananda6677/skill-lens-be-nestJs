@@ -10,6 +10,11 @@ import { In, Repository } from 'typeorm';
 import { Guru } from './entities/guru.entity';
 import { Siswa } from '../siswa/entities/siswa.entity';
 import { NilaiKategoriSiswa } from '../nilai_siswa/entities/nilai_kategori_siswa.entity';
+import { NilaiSiswa } from '../nilai_siswa/entities/nilai_siswa.entity';
+import { RecommendationRun } from '../recommendations/entities/recommendation-run.entity';
+import { RecommendationResult } from '../recommendations/entities/recommendation-result.entity';
+import { StudentRoadmap } from '../roadmaps/entities/student-roadmap.entity';
+import { StudentRoadmapProgress } from '../roadmaps/entities/student-roadmap-progress.entity';
 import { Sekolah } from '../sekolah/entities/sekolah.entity';
 import { Jurusan } from '../jurusan/entities/jurusan.entity';
 import { GuidanceNote } from './entities/guidance-note.entity';
@@ -21,6 +26,16 @@ export class GuruService {
     @InjectRepository(Siswa) private readonly siswaRepo: Repository<Siswa>,
     @InjectRepository(NilaiKategoriSiswa)
     private readonly kategoriRepo: Repository<NilaiKategoriSiswa>,
+    @InjectRepository(NilaiSiswa)
+    private readonly nilaiRepo: Repository<NilaiSiswa>,
+    @InjectRepository(RecommendationRun)
+    private readonly recommendationRunRepo: Repository<RecommendationRun>,
+    @InjectRepository(RecommendationResult)
+    private readonly recommendationResultRepo: Repository<RecommendationResult>,
+    @InjectRepository(StudentRoadmap)
+    private readonly studentRoadmapRepo: Repository<StudentRoadmap>,
+    @InjectRepository(StudentRoadmapProgress)
+    private readonly studentRoadmapProgressRepo: Repository<StudentRoadmapProgress>,
     @InjectRepository(Sekolah)
     private readonly sekolahRepo: Repository<Sekolah>,
     @InjectRepository(Jurusan)
@@ -340,6 +355,154 @@ export class GuruService {
     };
   }
 
+  private mapRecommendationResult(row: RecommendationResult) {
+    return {
+      id: row.id_recommendation_result,
+      rank: row.rank_order,
+      title: row.alternative_name,
+      category: row.alternative_type ?? 'Rekomendasi',
+      score: Number(row.score ?? 0),
+      roadmapId: row.roadmap_id ?? null,
+      summary:
+        row.detail?.alasan ??
+        row.detail?.summary ??
+        row.detail?.deskripsi ??
+        'Rekomendasi berdasarkan nilai akademik dan profil siswa.',
+    };
+  }
+
+  private safeParseJson(value: any) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value !== 'string') return value;
+
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  private mapRawRecommendationResult(row: any): RecommendationResult {
+    return {
+      id_recommendation_result: Number(row.id_recommendation_result),
+      id_recommendation_run: Number(row.id_recommendation_run),
+      rank_order: Number(row.rank_order ?? 0),
+      alternative_id:
+        row.alternative_id === null || row.alternative_id === undefined
+          ? null
+          : Number(row.alternative_id),
+      roadmap_id:
+        row.roadmap_id === null || row.roadmap_id === undefined
+          ? null
+          : Number(row.roadmap_id),
+      alternative_name: String(row.alternative_name ?? 'Rekomendasi'),
+      alternative_type: row.alternative_type ?? null,
+      score: Number(row.score ?? 0),
+      detail: this.safeParseJson(row.detail),
+      created_at: row.created_at,
+    } as RecommendationResult;
+  }
+
+  private async getLatestRecommendationsByStudentIds(studentIds: number[]) {
+    const latestRunByStudent = new Map<number, RecommendationRun>();
+    if (!studentIds.length) {
+      return { runs: latestRunByStudent, results: new Map<number, RecommendationResult[]>() };
+    }
+
+    // Pakai raw query supaya data JSON lama/kosong di kolom simple-json tidak membuat TypeORM gagal hydration.
+    const placeholders = studentIds.map(() => '?').join(',');
+    const runs = await this.recommendationRunRepo.query(
+      `SELECT id_recommendation_run, id_siswa, run_code, status, created_at
+       FROM recommendation_runs
+       WHERE id_siswa IN (${placeholders}) AND status = 'success'
+       ORDER BY id_recommendation_run DESC`,
+      studentIds,
+    );
+
+    for (const raw of runs) {
+      const siswaId = Number(raw.id_siswa);
+      if (!latestRunByStudent.has(siswaId)) {
+        latestRunByStudent.set(siswaId, {
+          id_recommendation_run: Number(raw.id_recommendation_run),
+          id_siswa: siswaId,
+          run_code: raw.run_code ?? null,
+          status: raw.status ?? 'success',
+          created_at: raw.created_at,
+        } as RecommendationRun);
+      }
+    }
+
+    const latestRunIds = Array.from(latestRunByStudent.values()).map(
+      (run) => run.id_recommendation_run,
+    );
+    const resultsByRun = new Map<number, RecommendationResult[]>();
+
+    if (latestRunIds.length) {
+      const runPlaceholders = latestRunIds.map(() => '?').join(',');
+      const results = await this.recommendationResultRepo.query(
+        `SELECT id_recommendation_result, id_recommendation_run, rank_order, alternative_id,
+                roadmap_id, alternative_name, alternative_type, score, detail, created_at
+         FROM recommendation_results
+         WHERE id_recommendation_run IN (${runPlaceholders})
+         ORDER BY rank_order ASC`,
+        latestRunIds,
+      );
+
+      for (const raw of results) {
+        const result = this.mapRawRecommendationResult(raw);
+        const group = resultsByRun.get(result.id_recommendation_run) ?? [];
+        group.push(result);
+        resultsByRun.set(result.id_recommendation_run, group);
+      }
+    }
+
+    return { runs: latestRunByStudent, results: resultsByRun };
+  }
+
+  private async getActiveRoadmapsByStudentIds(studentIds: number[]) {
+    const activeByStudent = new Map<number, StudentRoadmap>();
+    if (!studentIds.length) return activeByStudent;
+
+    const rows = await this.studentRoadmapRepo.find({
+      where: { id_siswa: In(studentIds), status: 'aktif' } as any,
+      relations: ['roadmap'],
+      order: { id_student_roadmap: 'DESC' } as any,
+    });
+
+    for (const row of rows) {
+      if (!activeByStudent.has(row.id_siswa)) {
+        activeByStudent.set(row.id_siswa, row);
+      }
+    }
+
+    return activeByStudent;
+  }
+
+  private async getProgressPercentByStudentRoadmapIds(studentRoadmapIds: number[]) {
+    const percentByRoadmap = new Map<number, number>();
+    if (!studentRoadmapIds.length) return percentByRoadmap;
+
+    const rows = await this.studentRoadmapProgressRepo.find({
+      where: { id_student_roadmap: In(studentRoadmapIds) } as any,
+    });
+
+    const grouped = new Map<number, StudentRoadmapProgress[]>();
+    for (const row of rows) {
+      const group = grouped.get(row.id_student_roadmap) ?? [];
+      group.push(row);
+      grouped.set(row.id_student_roadmap, group);
+    }
+
+    for (const id of studentRoadmapIds) {
+      const group = grouped.get(id) ?? [];
+      const total = group.length;
+      const selesai = group.filter((row) => row.status === 'selesai').length;
+      percentByRoadmap.set(id, total ? Math.round((selesai / total) * 100) : 0);
+    }
+
+    return percentByRoadmap;
+  }
+
   async getGuidanceCases(userId: number) {
     const guru = await this.getGuruByUserId(userId);
     this.ensureApprovedSchool(guru);
@@ -365,6 +528,15 @@ export class GuruService {
       nilaiBySiswa.set(row.id_siswa, group);
     }
 
+    const [{ runs: latestRunByStudent, results: resultsByRun }, activeRoadmaps] = await Promise.all([
+      this.getLatestRecommendationsByStudentIds(siswaIds),
+      this.getActiveRoadmapsByStudentIds(siswaIds),
+    ]);
+
+    const progressByRoadmap = await this.getProgressPercentByStudentRoadmapIds(
+      Array.from(activeRoadmaps.values()).map((row) => row.id_student_roadmap),
+    );
+
     return siswa.map((item) => {
       const nilai = nilaiBySiswa.get(item.id_siswa) ?? [];
       const avg = nilai.length
@@ -374,29 +546,50 @@ export class GuruService {
           )
         : 0;
       const priority = avg && avg < 75 ? 'Tinggi' : avg < 85 ? 'Sedang' : 'Normal';
+      const latestRun = latestRunByStudent.get(item.id_siswa) ?? null;
+      const recommendationRows = latestRun
+        ? (resultsByRun.get(latestRun.id_recommendation_run) ?? []).slice(0, 3)
+        : [];
+      const recommendations = recommendationRows.map((row) => this.mapRecommendationResult(row));
+      const activeRoadmap = activeRoadmaps.get(item.id_siswa) ?? null;
+      const selectedRecommendation = recommendations.find(
+        (row) => Number(row.roadmapId || 0) === Number(activeRoadmap?.id_roadmap || 0),
+      ) ?? recommendations[0] ?? null;
+      const roadmapProgress = activeRoadmap
+        ? (progressByRoadmap.get(activeRoadmap.id_student_roadmap) ?? 0)
+        : 0;
 
       return {
         id: `g-${item.id_siswa}`,
         studentId: String(item.id_siswa),
         studentName: item.user?.nama ?? item.nisn,
+        nisn: item.nisn,
         className: item.kelas,
+        jurusan: item.jurusan ?? null,
+        phone: item.user?.no_hp ?? null,
         topic: avg
           ? 'Tindak lanjut hasil rekomendasi dari layanan SPK'
           : 'Lengkapi data akademik dan profil siswa',
         priority,
-        status: 'Menunggu',
+        status: activeRoadmap ? 'Roadmap aktif' : latestRun ? 'Belum memilih roadmap' : 'Belum generate rekomendasi',
         requestedAt: new Date().toLocaleDateString('id-ID'),
         schedule: 'Belum dijadwalkan',
         recommendation:
-          avg >= 85
+          selectedRecommendation?.title ??
+          (avg >= 85
             ? 'Kandidat prioritas untuk rekomendasi lanjutan'
             : avg >= 75
               ? 'Perlu validasi minat dan tujuan'
-              : 'Perlu pendampingan akademik dasar',
+              : 'Perlu pendampingan akademik dasar'),
+        recommendations,
+        selectedRecommendation,
+        selectedRoadmapId: activeRoadmap?.id_roadmap ?? null,
+        selectedRoadmapTitle: activeRoadmap?.roadmap?.title ?? selectedRecommendation?.title ?? null,
+        hasActiveRoadmap: Boolean(activeRoadmap),
         lastNote: avg
           ? `Rata-rata kategori akademik ${avg}. Validasi rekomendasi dilakukan melalui layanan SPK Python.`
           : 'Data nilai belum lengkap.',
-        progress: Math.max(10, Math.min(95, avg || 20)),
+        progress: activeRoadmap ? roadmapProgress : 0,
       };
     });
   }
@@ -421,6 +614,81 @@ export class GuruService {
         must_change_password: row.user?.must_change_password === 1,
         akun_baru: false,
       }));
+  }
+
+  async getNilaiSiswa(userId: number, siswaId: number) {
+    const guru = await this.getGuruByUserId(userId);
+    this.ensureApprovedSchool(guru);
+    await this.ensureStudentInGuruSchool(guru, siswaId);
+
+    const siswa = await this.siswaRepo.findOne({
+      where: { id_siswa: siswaId },
+      relations: ['user'],
+    });
+
+    if (!siswa) {
+      throw new NotFoundException('Siswa tidak ditemukan.');
+    }
+
+    const nilaiRows = await this.nilaiRepo.find({
+      where: { id_siswa: siswaId },
+      relations: [
+        'kurikulum_mapel',
+        'kurikulum_mapel.semester',
+        'kurikulum_mapel.mata_pelajaran',
+      ],
+      order: { id_nilai: 'ASC' },
+    });
+
+    function parseSemesterName(value?: string | null) {
+      const match = String(value ?? '').match(/\d+/);
+      return match ? Number(match[0]) : null;
+    }
+
+    function labelKategori(kategori: string) {
+      const labels: Record<string, string> = {
+        numerik: 'Numerik',
+        bahasa: 'Bahasa',
+        sains: 'Sains',
+        sosial: 'Sosial',
+        teknologi: 'Teknologi',
+        agama: 'Agama',
+        kreativitas: 'Kreativitas',
+        softskill: 'Softskill',
+      };
+      return labels[kategori] || kategori;
+    }
+
+    const data = nilaiRows
+      .map((row) => {
+        const kurikulum = row.kurikulum_mapel;
+        const mapel = kurikulum?.mata_pelajaran;
+        const namaMapel = mapel?.nama_mapel?.trim();
+        if (!namaMapel) return null;
+
+        const semester =
+          mapel?.semester ??
+          parseSemesterName(kurikulum?.semester?.nama_semester) ??
+          0;
+        const kategori = String(mapel?.kategori || 'softskill');
+
+        return {
+          id_nilai: row.id_nilai,
+          id_kurikulum_mapel: row.id_kurikulum_mapel ?? kurikulum?.id_kurikulum_mapel,
+          nama_mapel: namaMapel,
+          nilai: row.nilai,
+          semester,
+          kategori,
+          kategori_label: labelKategori(kategori),
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => {
+        if (a.semester !== b.semester) return a.semester - b.semester;
+        return a.nama_mapel.localeCompare(b.nama_mapel);
+      });
+
+    return { data };
   }
 
   async listGuidanceNotes(userId: number, idSiswa: number) {

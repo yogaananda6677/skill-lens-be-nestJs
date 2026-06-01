@@ -1,11 +1,11 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Column, Entity, Index, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
 import { SiswaTag } from '../../siswa_tag/entities/siswa_tag.entity';
 
 export type MasterTagTipe = 'minat' | 'bakat' | 'hobi' | 'pengalaman' | 'prestasi';
 
 @Entity('master_tags')
-@Unique(['tipe', 'label'])
+@Index('idx_master_tags_tipe_label', ['tipe', 'label'])
 export class MasterTag {
   @PrimaryGeneratedColumn()
   id!: number;

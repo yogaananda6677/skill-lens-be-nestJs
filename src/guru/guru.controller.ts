@@ -63,6 +63,12 @@ export class GuruController {
     return this.guruService.getSiswaAccounts(req.user.id_user);
   }
 
+
+  @Get('siswa/:idSiswa/nilai')
+  getNilaiSiswa(@Req() req: any, @Param('idSiswa') idSiswa: string) {
+    return this.guruService.getNilaiSiswa(req.user.id_user, Number(idSiswa));
+  }
+
   @Get('siswa/:idSiswa/bimbingan')
   listGuidanceNotes(@Req() req: any, @Param('idSiswa') idSiswa: string) {
     return this.guruService.listGuidanceNotes(req.user.id_user, Number(idSiswa));

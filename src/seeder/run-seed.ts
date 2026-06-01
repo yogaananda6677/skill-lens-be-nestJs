@@ -12,17 +12,49 @@ function env(name: string, fallback = '') {
   return process.env[name] ?? fallback;
 }
 
+/**
+ * Seed SkillLens berisi data master SPK yang cukup besar.
+ * Supaya aman dijalankan berulang di laptop lokal, tabel master/SPK
+ * direset dulu sebelum seed. Ini mencegah error duplicate/row kosong
+ * seperti master_tags tipe/label kosong.
+ *
+ * Set SEED_RESET=0 kalau benar-benar ingin menjalankan seed tanpa reset.
+ */
+const RESET_TABLES = [
+  // data pilihan profil siswa
+  'siswa_tag',
+  'master_tags',
+
+  // data SPK
+  'criteria_weights',
+  'weight_profiles',
+  'source_tag_weights',
+  'tag_category_scores',
+  'tag_similarity_groups',
+  'prestasi_level_weights',
+  'prestasi_rank_weights',
+  'prestasi_type_weights',
+  'dataset_source_map',
+  'source_references',
+
+  // roadmap hasil generate dari alternatives
+  'roadmap_step_detail',
+  'roadmap_step',
+  'roadmap_master',
+
+  // alternatif rekomendasi
+  'alternatives',
+];
+
 function assertSafeSeed(sqlText: string) {
   /**
    * ALTER TABLE, DROP TABLE, DROP PROCEDURE tetap diizinkan
-   * karena migration/seed kamu memang butuh itu.
+   * karena migration/seed memang butuh itu.
+   *
+   * TRUNCATE/DELETE FROM tidak diblokir di file ini karena proses reset
+   * sudah dikendalikan oleh script seed.
    */
-  const blocked = [
-    'DROP DATABASE',
-    'CREATE DATABASE',
-    'TRUNCATE',
-    'DELETE FROM',
-  ];
+  const blocked = ['DROP DATABASE', 'CREATE DATABASE'];
 
   const upper = sqlText.toUpperCase();
 
@@ -84,6 +116,70 @@ function splitSqlStatements(sqlText: string): string[] {
   });
 }
 
+async function tableExists(connection: mysql.Connection, tableName: string) {
+  const [rows] = await connection.query<any[]>(
+    `SELECT COUNT(*) AS total
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?`,
+    [tableName],
+  );
+
+  return Number(rows?.[0]?.total ?? 0) > 0;
+}
+
+async function resetMasterSpkTables(connection: mysql.Connection) {
+  if (String(process.env.SEED_RESET ?? '1') === '0') {
+    console.log('[SEED] Reset master/SPK dilewati karena SEED_RESET=0.');
+    return;
+  }
+
+  console.log('[SEED] Reset master_tags + data SPK agar seed bersih...');
+
+  await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+
+  try {
+    for (const tableName of RESET_TABLES) {
+      if (!(await tableExists(connection, tableName))) continue;
+
+      await connection.query(`DELETE FROM \`${tableName}\``).catch(async () => {
+        // Fallback untuk tabel dengan constraint/struktur aneh.
+        await connection.query(`DROP TABLE IF EXISTS \`${tableName}\``);
+      });
+
+      await connection
+        .query(`ALTER TABLE \`${tableName}\` AUTO_INCREMENT = 1`)
+        .catch(() => undefined);
+    }
+  } finally {
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+  }
+
+  console.log('[SEED] Reset selesai.');
+}
+
+async function cleanupMasterTags(connection: mysql.Connection) {
+  if (!(await tableExists(connection, 'master_tags'))) return;
+
+  await connection.query(`
+    DELETE FROM master_tags
+    WHERE tipe IS NULL
+       OR label IS NULL
+       OR TRIM(tipe) = ''
+       OR TRIM(label) = ''
+  `);
+
+  // Hapus duplikat tipe+label, sisakan id paling kecil.
+  await connection.query(`
+    DELETE mt1
+    FROM master_tags mt1
+    JOIN master_tags mt2
+      ON LOWER(TRIM(mt1.tipe)) = LOWER(TRIM(mt2.tipe))
+     AND LOWER(TRIM(mt1.label)) = LOWER(TRIM(mt2.label))
+     AND mt1.id > mt2.id
+  `).catch(() => undefined);
+}
+
 async function main() {
   const sqlText = readFileSync(SQL_PATH, 'utf8');
 
@@ -108,6 +204,8 @@ async function main() {
   try {
     console.log(`[SEED] Connected to ${database}`);
 
+    await resetMasterSpkTables(connection);
+
     const statements = splitSqlStatements(sqlText);
 
     console.log(`[SEED] Menjalankan ${statements.length} statement...`);
@@ -123,6 +221,8 @@ async function main() {
         throw error;
       }
     }
+
+    await cleanupMasterTags(connection);
 
     console.log('[SEED] SkillLens seed selesai dijalankan.');
   } finally {

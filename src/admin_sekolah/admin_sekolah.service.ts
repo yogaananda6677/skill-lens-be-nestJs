@@ -771,9 +771,28 @@ export class AdminSekolahService {
     }
 
     if (idJurusan) {
-      qb.andWhere('siswa.id_jurusan = :idJurusan', {
-        idJurusan,
+      const selectedJurusan = await this.jurusanRepo.findOne({
+        where: {
+          id_jurusan: idJurusan,
+          id_sekolah: sekolah.id_sekolah,
+        },
       });
+
+      const selectedJurusanName = this.clean(selectedJurusan?.nama_jurusan);
+
+      if (selectedJurusanName) {
+        qb.andWhere(
+          '(siswa.id_jurusan = :idJurusan OR LOWER(TRIM(siswa.jurusan)) = LOWER(TRIM(:selectedJurusanName)))',
+          {
+            idJurusan,
+            selectedJurusanName,
+          },
+        );
+      } else {
+        qb.andWhere('siswa.id_jurusan = :idJurusan', {
+          idJurusan,
+        });
+      }
     }
 
     if (kelas) {

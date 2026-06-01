@@ -24,7 +24,7 @@ export class SpkClientService {
       const result = await response.json().catch(() => null);
       if (!response.ok) {
         throw new BadRequestException(
-          result?.message || 'Gagal memproses rekomendasi dari layanan SPK.',
+          result?.message || result?.detail || 'Gagal memproses rekomendasi dari layanan SPK.',
         );
       }
 
