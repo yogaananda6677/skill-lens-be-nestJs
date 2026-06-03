@@ -265,7 +265,13 @@ export class NilaiSiswaService {
       this.setOptionSemester(options, null);
     }
 
-    if (options.jurusanId && !options.jurusan) {
+    if (jenisSekolah === 'SMK' && !options.jurusanId && !options.jurusan) {
+      throw new BadRequestException(
+        'Pilih jurusan SMK terlebih dahulu sebelum import nilai.',
+      );
+    }
+
+    if (options.jurusanId) {
       const jurusan = await this.dataSource.getRepository(Jurusan).findOne({
         where: { id_jurusan: options.jurusanId },
       });
@@ -280,6 +286,8 @@ export class NilaiSiswaService {
         );
       }
 
+      // Untuk SMK, jurusan yang dipilih dari UI adalah sumber utama.
+      // Ini mencegah metadata Excel lama memakai id_jurusan yang sudah tidak ada.
       options.jurusan = jurusan.nama_jurusan;
     }
 
@@ -790,6 +798,14 @@ private createMetaSheet(
     let semester = metaFromSheet.semester || parsedSemester || 1;
     let sheetJurusan = metaFromSheet.jurusan || options.jurusan || '';
     let sheetJurusanId = metaFromSheet.idJurusan ?? null;
+
+    if (!isSma) {
+        // SMK selalu mengikuti jurusan yang dipilih di UI.
+        // Jangan percaya penuh id_jurusan dari file Excel karena file lama bisa
+        // membawa id_jurusan yang sudah terhapus / milik sekolah lain.
+        sheetJurusan = options.jurusan || sheetJurusan;
+        sheetJurusanId = options.jurusanId ?? sheetJurusanId;
+    }
 
     if (isSma && !isMultiSemester) {
         semester = Number(selectedSemester);
@@ -1624,17 +1640,47 @@ private createMetaSheet(
     const isMapelUmum =
       isSma && (grade.semester === 1 || grade.semester === 2);
 
+    const selectedJurusanId = options.jurusanId ?? null;
+
     const jurusanFromSheet =
-      !isMapelUmum && !grade.jurusanId
+      !isMapelUmum && !selectedJurusanId && !grade.jurusanId
         ? await this.getJurusanByName(grade.jurusan, options.sekolahId)
         : null;
 
     const effectiveJurusanId = isMapelUmum
       ? null
-      : grade.jurusanId ??
-        jurusanFromSheet?.id_jurusan ??
-        options.jurusanId ??
-        null;
+      : !isSma && selectedJurusanId
+        ? selectedJurusanId
+        : grade.jurusanId ??
+          jurusanFromSheet?.id_jurusan ??
+          selectedJurusanId ??
+          null;
+
+    if (!isMapelUmum && !effectiveJurusanId) {
+      throw new BadRequestException(
+        isSma
+          ? `Jurusan untuk mapel ${grade.mapel} semester ${grade.semester} tidak ditemukan.`
+          : 'Pilih jurusan SMK terlebih dahulu sebelum import nilai.',
+      );
+    }
+
+    if (effectiveJurusanId) {
+      const jurusan = await manager.getRepository(Jurusan).findOne({
+        where: { id_jurusan: effectiveJurusanId },
+      });
+
+      if (!jurusan) {
+        throw new BadRequestException(
+          `Jurusan dengan ID ${effectiveJurusanId} tidak ditemukan. Download ulang template atau pilih jurusan yang benar.`,
+        );
+      }
+
+      if (options.sekolahId && jurusan.id_sekolah !== options.sekolahId) {
+        throw new BadRequestException(
+          `Jurusan ${jurusan.nama_jurusan} tidak sesuai dengan sekolah yang sedang login.`,
+        );
+      }
+    }
 
     const cacheKey = [
       options.sekolahId ?? 'global',

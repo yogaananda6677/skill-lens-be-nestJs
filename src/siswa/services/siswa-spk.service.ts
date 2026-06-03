@@ -112,10 +112,20 @@ export class SiswaSpkService {
     const rawRows = this.findRecommendationRows(recommendation);
 
     /**
+     * 5b. Response Python/SPK bisa belum membawa roadmap_id, sedangkan
+     * RecommendationsService sudah memetakan roadmapId dari DB.
+     * Gabungkan roadmapId ke row asli agar tombol Roadmap di frontend aktif.
+     */
+    const rowsWithRoadmap = this.mergeRoadmapIdsFromSavedRows(
+      rawRows,
+      this.findSavedRecommendationRows(recommendation),
+    );
+
+    /**
      * 6. Siapkan top rekomendasi untuk AI.
      * AI hanya memperbaiki bahasa field alasan, bukan menghitung ulang skor.
      */
-    const rowsForAi = this.prepareRowsForAi(rawRows);
+    const rowsForAi = this.prepareRowsForAi(rowsWithRoadmap);
 
     const polishedRowsForAi =
       await this.aiReasonPolisherService.polishTopRecommendationReasons({
@@ -125,9 +135,19 @@ export class SiswaSpkService {
 
     /**
      * 7. Merge kembali alasan AI ke row asli.
-     * Field lain tetap dari Python SPK.
+     * Field lain tetap dari Python SPK, termasuk roadmapId hasil mapping DB.
      */
-    const finalRows = this.mergePolishedReasons(rawRows, polishedRowsForAi);
+    const finalRows = this.mergePolishedReasons(rowsWithRoadmap, polishedRowsForAi);
+
+    /**
+     * 7b. Simpan alasan AI ke recommendation_results.detail.
+     * Dengan begitu saat halaman di-refresh atau kembali dari Roadmap,
+     * alasan yang tampil tetap versi AI, bukan alasan mentah dari engine SPK.
+     */
+    await this.recommendationsService.updateResultDetailsWithRows(
+      recommendation.id_recommendation_run,
+      finalRows,
+    );
 
     /**
      * 8. Tempelkan kembali rows yang sudah dipoles ke response.
@@ -156,6 +176,11 @@ export class SiswaSpkService {
   async getLatestSpk(userId: number) {
     const siswaDto = await this.siswaProfileService.getMe(userId);
     return this.recommendationsService.getLatestBySiswa(siswaDto.id_siswa);
+  }
+
+  async getSpkHistory(userId: number) {
+    const siswaDto = await this.siswaProfileService.getMe(userId);
+    return this.recommendationsService.getHistoryBySiswa(siswaDto.id_siswa);
   }
 
   private prepareRowsForAi(rows: RecommendationRow[]) {
@@ -274,6 +299,68 @@ export class SiswaSpkService {
       return {
         ...original,
         alasan: polishedReason,
+      };
+    });
+  }
+
+  private findSavedRecommendationRows(value: any): RecommendationRow[] {
+    const rows = [
+      ...(Array.isArray(value?.recommendations) ? value.recommendations : []),
+      ...(Array.isArray(value?.results) ? value.results : []),
+    ];
+
+    return rows.filter((item) => item && typeof item === 'object');
+  }
+
+  private mergeRoadmapIdsFromSavedRows(
+    rawRows: RecommendationRow[],
+    savedRows: RecommendationRow[],
+  ) {
+    if (!Array.isArray(rawRows) || rawRows.length === 0) {
+      return [];
+    }
+
+    if (!Array.isArray(savedRows) || savedRows.length === 0) {
+      return rawRows;
+    }
+
+    return rawRows.map((raw, index) => {
+      const rawAltId = this.extractAlternativeId(raw);
+      const rawTitle = this.normalizeText(this.extractTitle(raw));
+
+      const match =
+        savedRows.find((saved) => {
+          const savedAltId = this.extractAlternativeId(saved);
+
+          if (rawAltId != null && savedAltId != null) {
+            return Number(rawAltId) === Number(savedAltId);
+          }
+
+          return this.normalizeText(this.extractTitle(saved)) === rawTitle;
+        }) ?? savedRows[index];
+
+      const roadmapId =
+        raw.roadmapId ??
+        raw.id_roadmap ??
+        raw.roadmap_id ??
+        raw.roadmap?.id_roadmap ??
+        raw.roadmap?.id ??
+        match?.roadmapId ??
+        match?.id_roadmap ??
+        match?.roadmap_id ??
+        match?.roadmap?.id_roadmap ??
+        match?.roadmap?.id ??
+        null;
+
+      if (!roadmapId) {
+        return raw;
+      }
+
+      return {
+        ...raw,
+        roadmapId,
+        id_roadmap: raw.id_roadmap ?? roadmapId,
+        roadmap_id: raw.roadmap_id ?? roadmapId,
       };
     });
   }
@@ -503,6 +590,27 @@ export class SiswaSpkService {
     }
 
     return [];
+  }
+
+  private extractAlternativeId(item: any): number | null {
+    const value =
+      item?.alternatifId ??
+      item?.alternativeId ??
+      item?.alternatif_id ??
+      item?.id_alternatif ??
+      item?.alternative_id ??
+      item?.id ??
+      null;
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private normalizeText(value: any): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
   }
 
   private extractTitle(item: any): string {

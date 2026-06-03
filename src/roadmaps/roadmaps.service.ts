@@ -129,6 +129,53 @@ export class RoadmapsService {
     };
   }
 
+  async getMyRoadmapHistory(userId: number) {
+    const siswa = await this.getSiswaByUserId(userId);
+
+    const rows = await this.studentRoadmapRepo.find({
+      where: { id_siswa: siswa.id_siswa },
+      relations: ['roadmap'],
+      order: { id_student_roadmap: 'DESC' },
+      take: 20,
+    });
+
+    const data = await Promise.all(
+      rows.map(async (row) => {
+        const progressRows = await this.progressRepo.find({
+          where: { id_student_roadmap: row.id_student_roadmap },
+        });
+
+        const total = progressRows.length;
+        const completed = progressRows.filter((progress) => progress.status === 'selesai').length;
+        const inProgress = progressRows.filter((progress) => progress.status === 'proses').length;
+        const progressPercent = total ? Math.round((completed / total) * 100) : 0;
+
+        return {
+          id_student_roadmap: row.id_student_roadmap,
+          id_roadmap: row.id_roadmap,
+          title: row.roadmap?.title ?? 'Roadmap Pengembangan Diri',
+          recommended_for: row.roadmap?.recommended_for ?? null,
+          category: row.roadmap?.category ?? null,
+          status: row.status,
+          progress_percent: progressPercent,
+          total_detail: total,
+          completed_detail: completed,
+          in_progress_detail: inProgress,
+          started_at: row.started_at,
+          completed_at: row.completed_at,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          is_active: row.status === 'aktif',
+        };
+      }),
+    );
+
+    return {
+      message: 'Riwayat roadmap berhasil diambil.',
+      data,
+    };
+  }
+
   async getMyActiveRoadmap(userId: number) {
     const siswa = await this.getSiswaByUserId(userId);
     const active = await this.studentRoadmapRepo.findOne({

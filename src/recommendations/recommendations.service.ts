@@ -3,7 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 
+import { RoadmapMaster, RoadmapTargetType } from '../roadmap_master/entities/roadmap_master.entity';
 import { Siswa } from '../siswa/entities/siswa.entity';
+import { StudentRoadmap } from '../roadmaps/entities/student-roadmap.entity';
 import { RecommendationResult } from './entities/recommendation-result.entity';
 import { RecommendationRun } from './entities/recommendation-run.entity';
 import { SpkClientService } from './spk-client.service';
@@ -30,6 +32,12 @@ export class RecommendationsService {
 
     @InjectRepository(Siswa)
     private readonly siswaRepo: Repository<Siswa>,
+
+    @InjectRepository(RoadmapMaster)
+    private readonly roadmapRepo: Repository<RoadmapMaster>,
+
+    @InjectRepository(StudentRoadmap)
+    private readonly studentRoadmapRepo: Repository<StudentRoadmap>,
 
     private readonly spkClient: SpkClientService,
   ) {}
@@ -61,7 +69,7 @@ export class RecommendationsService {
       throw error;
     }
 
-    const alternatives = this.extractAlternatives(result);
+    const alternatives = await this.extractAlternatives(result, payload.tujuan_karir);
 
     const run = await this.runRepo.manager.transaction(async (manager) => {
       /**
@@ -121,6 +129,53 @@ export class RecommendationsService {
     };
   }
 
+  async updateResultDetailsWithRows(
+    idRecommendationRun: number,
+    rows: Array<Record<string, any>>,
+  ) {
+    if (!idRecommendationRun || !Array.isArray(rows) || rows.length === 0) {
+      return;
+    }
+
+    const savedResults = await this.resultRepo.find({
+      where: { id_recommendation_run: idRecommendationRun } as any,
+      order: { rank_order: 'ASC' } as any,
+    });
+
+    if (!savedResults.length) return;
+
+    for (const result of savedResults) {
+      const matched = this.findMatchingRowForResult(result, rows);
+      if (!matched) continue;
+
+      const roadmapId =
+        this.resolveRoadmapId(matched) ??
+        this.toNumberOrNull(matched.roadmapId) ??
+        result.roadmap_id;
+      const polishedReason = this.extractSummaryFromDetail(matched);
+      const mergedDetail = {
+        ...(result.detail && typeof result.detail === 'object' ? result.detail : {}),
+        ...matched,
+      };
+
+      if (polishedReason) {
+        mergedDetail.alasan = polishedReason;
+        mergedDetail.summary = polishedReason;
+        mergedDetail.alasan_ai = polishedReason;
+      }
+
+      if (roadmapId) {
+        result.roadmap_id = roadmapId;
+        mergedDetail.roadmapId = roadmapId;
+        mergedDetail.roadmap_id = mergedDetail.roadmap_id ?? roadmapId;
+        mergedDetail.id_roadmap = mergedDetail.id_roadmap ?? roadmapId;
+      }
+
+      result.detail = mergedDetail;
+      await this.resultRepo.save(result);
+    }
+  }
+
   async getLatestBySiswa(idSiswa: number) {
     const latestRun = await this.runRepo.findOne({
       where: {
@@ -147,25 +202,32 @@ export class RecommendationsService {
       } as any,
     });
 
-    let recommendations = savedResults.map((item) => ({
-      id: item.id_recommendation_result ?? item.rank_order,
-      alternatifId: item.alternative_id ?? item.detail?.alternatif_id ?? null,
-      title: item.alternative_name,
-      category: item.alternative_type ?? 'rekomendasi',
-      score: Number(item.score ?? 0),
-      summary:
-        item.detail?.alasan ??
-        item.detail?.summary ??
-        item.detail?.deskripsi ??
-        'Rekomendasi berdasarkan nilai akademik dan profil siswa.',
-      dominantFactors: Array.isArray(item.detail?.tags_cocok)
-        ? item.detail.tags_cocok
-        : [],
-      roadmapId: item.roadmap_id ?? this.resolveRoadmapId(item.detail),
-      topsisRank: Number(item.rank_order ?? 1),
-      detailScore: item.detail?.detail_skor ?? null,
-      bobotDigunakan: item.detail?.bobot_digunakan ?? null,
-    }));
+    let recommendations: any[] = [];
+
+    for (const item of savedResults) {
+      const roadmapId =
+        item.roadmap_id ??
+        (await this.resolveRoadmapIdFromDatabase({
+          explicitRoadmapId: this.resolveRoadmapId(item.detail),
+          alternativeId: item.alternative_id ?? item.detail?.alternatif_id ?? item.detail?.id_alternatif ?? null,
+          name: item.alternative_name,
+          targetType: item.detail?.tujuan_karir ?? item.detail?.target_type ?? latestRun.tujuan_karir,
+        }));
+
+      recommendations.push({
+        id: item.id_recommendation_result ?? item.rank_order,
+        alternatifId: item.alternative_id ?? item.detail?.alternatif_id ?? null,
+        title: item.alternative_name,
+        category: item.alternative_type ?? latestRun.tujuan_karir ?? 'rekomendasi',
+        score: Number(item.score ?? 0),
+        summary: this.extractSummaryFromDetail(item.detail),
+        dominantFactors: this.extractDominantFactorsFromDetail(item.detail),
+        roadmapId,
+        topsisRank: Number(item.rank_order ?? 1),
+        detailScore: item.detail?.detail_skor ?? null,
+        bobotDigunakan: item.detail?.bobot_digunakan ?? null,
+      });
+    }
 
     /**
      * Fallback khusus data lama yang belum punya recommendation_results.
@@ -173,7 +235,7 @@ export class RecommendationsService {
      */
     if (!recommendations.length) {
       const rawResponse = this.safeJson(latestRun.raw_response);
-      const alternatives = this.extractAlternatives(rawResponse);
+      const alternatives = await this.extractAlternatives(rawResponse, latestRun.tujuan_karir);
       recommendations = alternatives.map((item, index) =>
         this.toFrontendRecommendation(item, index + 1),
       );
@@ -186,20 +248,230 @@ export class RecommendationsService {
     };
   }
 
-  async getHistoryBySiswa(idSiswa: number, limit = 10) {
+  async getHistoryBySiswa(idSiswa: number, limit = 8) {
     const runs = await this.runRepo.find({
-      where: { id_siswa: idSiswa } as any,
+      where: { id_siswa: idSiswa, status: 'success' } as any,
       order: { id_recommendation_run: 'DESC' } as any,
-      take: Math.max(1, Math.min(Number(limit) || 10, 50)),
+      take: Math.max(1, Math.min(Number(limit) || 8, 30)),
     });
 
+    if (!runs.length) {
+      return {
+        message: 'Belum ada histori generate SPK.',
+        data: [],
+      };
+    }
+
+    const roadmapRows = await this.studentRoadmapRepo.find({
+      where: { id_siswa: idSiswa } as any,
+      relations: ['roadmap'],
+      order: { id_student_roadmap: 'DESC' } as any,
+    });
+
+    const data = [] as any[];
+
+    for (let index = 0; index < runs.length; index += 1) {
+      const run = runs[index];
+      const newerRun = index > 0 ? runs[index - 1] : null;
+      const results = await this.resultRepo.find({
+        where: { id_recommendation_run: run.id_recommendation_run } as any,
+        order: { rank_order: 'ASC' } as any,
+      });
+
+      const recommendations = [] as any[];
+
+      for (const item of results) {
+        const roadmapId =
+          item.roadmap_id ??
+          (await this.resolveRoadmapIdFromDatabase({
+            explicitRoadmapId: this.resolveRoadmapId(item.detail),
+            alternativeId:
+              item.alternative_id ??
+              item.detail?.alternatif_id ??
+              item.detail?.id_alternatif ??
+              null,
+            name: item.alternative_name,
+            targetType:
+              item.detail?.tujuan_karir ?? item.detail?.target_type ?? run.tujuan_karir,
+          }));
+
+        recommendations.push({
+          id: item.id_recommendation_result ?? item.rank_order,
+          alternativeId: item.alternative_id ?? item.detail?.alternatif_id ?? null,
+          alternatifId: item.alternative_id ?? item.detail?.alternatif_id ?? null,
+          roadmapId,
+          title: item.alternative_name,
+          category: item.alternative_type ?? run.tujuan_karir ?? 'rekomendasi',
+          score: Number(item.score ?? 0),
+          summary: this.extractSummaryFromDetail(item.detail),
+          dominantFactors: this.extractDominantFactorsFromDetail(item.detail),
+          topsisRank: Number(item.rank_order ?? 1),
+        });
+      }
+
+      const selectedRoadmap = this.findSelectedRoadmapForRun({
+        run,
+        newerRun,
+        recommendations,
+        roadmapRows,
+      });
+
+      data.push({
+        id: run.id_recommendation_run,
+        id_recommendation_run: run.id_recommendation_run,
+        runCode: run.run_code,
+        run_code: run.run_code,
+        tujuanKarir: run.tujuan_karir,
+        tujuan_karir: run.tujuan_karir,
+        jenisSekolah: run.jenis_sekolah,
+        jenis_sekolah: run.jenis_sekolah,
+        jurusanSekolah: run.jurusan_sekolah,
+        jurusan_sekolah: run.jurusan_sekolah,
+        createdAt: run.created_at,
+        created_at: run.created_at,
+        selected: selectedRoadmap,
+        selectedRoadmap,
+        recommendations,
+      });
+    }
+
     return {
-      message: 'Histori rekomendasi berhasil dimuat.',
-      data: runs,
+      message: 'Histori generate SPK berhasil dimuat.',
+      data,
     };
   }
 
-  private extractAlternatives(result: any): NormalizedAlternative[] {
+  private findMatchingRowForResult(
+    result: RecommendationResult,
+    rows: Array<Record<string, any>>,
+  ) {
+    const resultAltId = this.toNumberOrNull(
+      result.alternative_id ?? result.detail?.alternatif_id ?? result.detail?.id_alternatif,
+    );
+    const resultTitle = this.normalizeText(result.alternative_name);
+
+    return (
+      rows.find((row) => {
+        const rowAltId = this.toNumberOrNull(
+          row?.alternativeId ??
+            row?.alternatifId ??
+            row?.alternatif_id ??
+            row?.id_alternatif ??
+            row?.id,
+        );
+
+        if (resultAltId && rowAltId && resultAltId === rowAltId) return true;
+
+        const rowTitle = this.normalizeText(
+          row?.title ??
+            row?.alternatif ??
+            row?.nama ??
+            row?.alternative_name ??
+            row?.nama_rekomendasi,
+        );
+
+        return Boolean(resultTitle && rowTitle && resultTitle === rowTitle);
+      }) ?? rows[(result.rank_order ?? 1) - 1]
+    );
+  }
+
+  private extractSummaryFromDetail(detail: any) {
+    const value =
+      detail?.alasan_ai ??
+      detail?.ai_reason ??
+      detail?.alasanPolished ??
+      detail?.alasan_polished ??
+      detail?.alasan ??
+      detail?.summary ??
+      detail?.deskripsi ??
+      detail?.description ??
+      detail?.keterangan ??
+      'Rekomendasi berdasarkan nilai akademik dan profil siswa.';
+
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item ?? '').trim()).filter(Boolean).join(' ');
+    }
+
+    if (value && typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return String(value ?? '').trim();
+  }
+
+  private extractDominantFactorsFromDetail(detail: any): string[] {
+    const value =
+      detail?.dominantFactors ??
+      detail?.faktor_dominan ??
+      detail?.tags_cocok ??
+      detail?.matched_tags ??
+      [];
+
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item ?? '').trim()).filter(Boolean).slice(0, 8);
+    }
+
+    if (typeof value === 'string') {
+      return value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+
+    return [];
+  }
+
+  private findSelectedRoadmapForRun({
+    run,
+    newerRun,
+    recommendations,
+    roadmapRows,
+  }: {
+    run: RecommendationRun;
+    newerRun: RecommendationRun | null;
+    recommendations: any[];
+    roadmapRows: StudentRoadmap[];
+  }) {
+    const runCreatedAt = new Date(run.created_at).getTime();
+    const newerRunCreatedAt = newerRun ? new Date(newerRun.created_at).getTime() : Number.POSITIVE_INFINITY;
+    const recommendationRoadmapIds = new Set(
+      recommendations
+        .map((item) => this.toNumberOrNull(item.roadmapId))
+        .filter((value): value is number => Boolean(value)),
+    );
+
+    if (!recommendationRoadmapIds.size) return null;
+
+    const selected = roadmapRows.find((row) => {
+      const createdAt = new Date(row.created_at).getTime();
+      return (
+        recommendationRoadmapIds.has(row.id_roadmap) &&
+        createdAt >= runCreatedAt &&
+        createdAt < newerRunCreatedAt
+      );
+    });
+
+    if (!selected) return null;
+
+    return {
+      id: selected.id_student_roadmap,
+      id_student_roadmap: selected.id_student_roadmap,
+      roadmapId: selected.id_roadmap,
+      id_roadmap: selected.id_roadmap,
+      title: selected.roadmap?.recommended_for ?? selected.roadmap?.title ?? 'Roadmap dipilih',
+      roadmapTitle: selected.roadmap?.title ?? null,
+      category: selected.roadmap?.category ?? selected.roadmap?.target_type ?? null,
+      status: selected.status,
+      selectedAt: selected.created_at,
+      selected_at: selected.created_at,
+    };
+  }
+
+  private async extractAlternatives(
+    result: any,
+    defaultTargetType?: unknown,
+  ): Promise<NormalizedAlternative[]> {
     const candidates =
       result?.top_rekomendasi ||
       result?.results ||
@@ -213,12 +485,14 @@ export class RecommendationsService {
 
     if (!Array.isArray(candidates)) return [];
 
-    return candidates.map((item: any, index) => ({
-      alternativeId: this.toNumberOrNull(
+    const rows: NormalizedAlternative[] = [];
+
+    for (const item of candidates) {
+      const index = rows.length;
+      const alternativeId = this.toNumberOrNull(
         item?.alternatif_id ?? item?.id_alternatif ?? item?.alternativeId ?? item?.id,
-      ),
-      roadmapId: this.resolveRoadmapId(item),
-      name: String(
+      );
+      const name = String(
         item?.alternatif ||
           item?.nama ||
           item?.name ||
@@ -226,17 +500,53 @@ export class RecommendationsService {
           item?.rekomendasi ||
           item?.label ||
           `Alternatif ${index + 1}`,
-      ),
-      type: item?.kategori || item?.type || item?.jenis || null,
-      score: Number(
-        item?.persentase_kecocokan ??
-          item?.score ??
-          item?.skor ??
-          item?.nilai ??
-          0,
-      ),
-      detail: item,
-    }));
+      );
+      const targetType =
+        item?.tujuan_karir ??
+        item?.target_type ??
+        item?.jalur ??
+        defaultTargetType ??
+        item?.jenis ??
+        item?.type ??
+        item?.kategori ??
+        null;
+      const type =
+        item?.kategori ??
+        item?.category ??
+        item?.tipe ??
+        item?.jenis ??
+        this.normalizeTargetType(targetType) ??
+        null;
+      const roadmapId = await this.resolveRoadmapIdFromDatabase({
+        explicitRoadmapId: this.resolveRoadmapId(item),
+        alternativeId,
+        name,
+        targetType,
+      });
+
+      if (roadmapId) {
+        item.roadmap_id = item.roadmap_id ?? roadmapId;
+        item.id_roadmap = item.id_roadmap ?? roadmapId;
+        item.roadmapId = item.roadmapId ?? roadmapId;
+      }
+
+      rows.push({
+        alternativeId,
+        roadmapId,
+        name,
+        type,
+        score: Number(
+          item?.persentase_kecocokan ??
+            item?.score ??
+            item?.skor ??
+            item?.nilai ??
+            0,
+        ),
+        detail: item,
+      });
+    }
+
+    return rows;
   }
 
   private resolveRoadmapId(detail: any) {
@@ -253,6 +563,81 @@ export class RecommendationsService {
     );
   }
 
+  private async resolveRoadmapIdFromDatabase({
+    explicitRoadmapId,
+    alternativeId,
+    name,
+    targetType,
+  }: {
+    explicitRoadmapId?: number | null;
+    alternativeId?: number | null;
+    name?: string | null;
+    targetType?: unknown;
+  }) {
+    if (explicitRoadmapId) return explicitRoadmapId;
+
+    const normalizedName = this.normalizeText(name);
+    const normalizedTargetType = this.normalizeTargetType(targetType);
+
+    if (normalizedName) {
+      const exactWhere: any = {
+        recommended_for: name,
+        is_active: 1,
+      };
+
+      if (normalizedTargetType) {
+        exactWhere.target_type = normalizedTargetType;
+      }
+
+      const exact = await this.roadmapRepo.findOne({ where: exactWhere });
+      if (exact) return exact.id_roadmap;
+    }
+
+    if (alternativeId) {
+      const byId = await this.roadmapRepo.findOne({
+        where: { id_roadmap: alternativeId, is_active: 1 },
+      });
+
+      if (
+        byId &&
+        (!normalizedTargetType || byId.target_type === normalizedTargetType) &&
+        (!normalizedName || this.normalizeText(byId.recommended_for) === normalizedName)
+      ) {
+        return byId.id_roadmap;
+      }
+    }
+
+    if (!normalizedName) return null;
+
+    const candidates = await this.roadmapRepo.find({
+      where: normalizedTargetType
+        ? ({ target_type: normalizedTargetType, is_active: 1 } as any)
+        : ({ is_active: 1 } as any),
+    });
+
+    const match = candidates.find(
+      (roadmap) => this.normalizeText(roadmap.recommended_for) === normalizedName,
+    );
+
+    return match?.id_roadmap ?? null;
+  }
+
+  private normalizeTargetType(value: unknown): RoadmapTargetType | null {
+    const text = this.normalizeText(value);
+    if (text === 'kuliah') return 'kuliah';
+    if (text === 'kerja') return 'kerja';
+    if (text === 'wirausaha') return 'wirausaha';
+    if (text === 'umum') return 'umum';
+    return null;
+  }
+
+  private normalizeText(value: unknown) {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
   private toFrontendRecommendation(item: NormalizedAlternative, rank: number) {
     return {
       id: item.alternativeId ?? rank,
@@ -260,14 +645,8 @@ export class RecommendationsService {
       title: item.name,
       category: item.type ?? 'rekomendasi',
       score: item.score,
-      summary:
-        item.detail?.alasan ??
-        item.detail?.summary ??
-        item.detail?.deskripsi ??
-        'Rekomendasi berdasarkan nilai akademik dan profil siswa.',
-      dominantFactors: Array.isArray(item.detail?.tags_cocok)
-        ? item.detail.tags_cocok
-        : [],
+      summary: this.extractSummaryFromDetail(item.detail),
+      dominantFactors: this.extractDominantFactorsFromDetail(item.detail),
       roadmapId: item.roadmapId,
       topsisRank: Number(item.detail?.rank ?? rank),
       detailScore: item.detail?.detail_skor ?? null,

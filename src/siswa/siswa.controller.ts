@@ -49,6 +49,12 @@ prosesSpk(@Req() req: any, @Body() body: any) {
     return this.siswaService.getLatestSpk(req.user.id_user);
   }
 
+  @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
+  @Get('spk/history')
+  getSpkHistory(@Req() req: any) {
+    return this.siswaService.getSpkHistory(req.user.id_user);
+  }
+
   @UseGuards(
     JwtAuthGuard,
     new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin']),

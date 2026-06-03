@@ -23,6 +23,12 @@ export class RoadmapsController {
   }
 
   @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
+  @Get('student/history')
+  getMyRoadmapHistory(@Req() req: any) {
+    return this.roadmapsService.getMyRoadmapHistory(req.user.id_user);
+  }
+
+  @UseGuards(JwtAuthGuard, new RoleGuard(['siswa']))
   @Get('student/active')
   getMyActiveRoadmap(@Req() req: any) {
     return this.roadmapsService.getMyActiveRoadmap(req.user.id_user);

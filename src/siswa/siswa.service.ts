@@ -38,8 +38,11 @@ export class SiswaService {
   }
 
   getLatestSpk(userId: number) {
-  return this.siswaSpkService.getLatestSpk(userId);
+    return this.siswaSpkService.getLatestSpk(userId);
+  }
+
+  getSpkHistory(userId: number) {
+    return this.siswaSpkService.getSpkHistory(userId);
+  }
 }
 
-
-}
