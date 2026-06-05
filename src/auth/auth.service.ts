@@ -680,7 +680,7 @@ export class AuthService {
         password: await bcrypt.hash(password, 12),
         role: 'guru',
         id_sekolah: null,
-        must_change_password: 0,
+        must_change_password: 1,
       }),
     );
 

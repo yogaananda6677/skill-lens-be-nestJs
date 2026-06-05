@@ -526,7 +526,7 @@ export class AdminSekolahService {
         password: await bcrypt.hash(nip, 12),
         role: 'guru',
         id_sekolah: sekolah.id_sekolah,
-        must_change_password: 1,
+        must_change_password: 0,
       }),
     );
 

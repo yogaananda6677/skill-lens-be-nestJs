@@ -39,7 +39,7 @@ export class AdminSeeder implements OnModuleInit {
         password: hashedPassword,
         role: 'superadmin',
         id_sekolah: null,
-        must_change_password: 1,
+        must_change_password: 0,
       }),
     );
 
