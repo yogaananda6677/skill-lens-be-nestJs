@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { Guru } from '../guru/entities/guru.entity';
 import { RoadmapMaster } from '../roadmap_master/entities/roadmap_master.entity';
@@ -41,6 +41,7 @@ export class RoadmapsService {
     private readonly progressRepo: Repository<StudentRoadmapProgress>,
     @InjectRepository(RoadmapStepNote)
     private readonly stepNoteRepo: Repository<RoadmapStepNote>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async listPublishedRoadmaps() {
@@ -66,8 +67,13 @@ export class RoadmapsService {
 
     if (!roadmap) throw new NotFoundException('Roadmap tidak ditemukan atau belum aktif.');
 
-    const detailIds = roadmap.steps
+    const stepLimit = await this.getRoadmapStepLimitSetting();
+    const selectedSteps = roadmap.steps
       .filter((step) => step.is_active === 1)
+      .sort((a, b) => a.step_order - b.step_order)
+      .slice(0, stepLimit);
+
+    const detailIds = selectedSteps
       .flatMap((step) => step.details.filter((detail) => detail.is_active === 1));
 
     if (detailIds.length === 0) {
@@ -336,6 +342,8 @@ export class RoadmapsService {
 
     if (!roadmap) throw new NotFoundException('Template roadmap tidak ditemukan.');
 
+    await this.syncProgressWithCurrentStepLimit(studentRoadmap, roadmap);
+
     const progressRows = await this.progressRepo.find({
       where: { id_student_roadmap: studentRoadmap.id_student_roadmap },
       relations: ['detail'],
@@ -362,6 +370,18 @@ export class RoadmapsService {
     const completed = progressRows.filter((row) => row.status === 'selesai').length;
     const percent = total ? Math.round((completed / total) * 100) : 0;
 
+    const availableSteps = roadmap.steps
+      .filter((step) => step.is_active === 1)
+      .sort((a, b) => a.step_order - b.step_order);
+
+    const generatedSteps = availableSteps.filter((step) =>
+      step.details.some((detail) => progressByDetail.has(detail.id_roadmap_step_detail)),
+    );
+
+    const stepsToShow = generatedSteps.length
+      ? generatedSteps
+      : availableSteps.slice(0, await this.getRoadmapStepLimitSetting());
+
     return {
       id_student_roadmap: studentRoadmap.id_student_roadmap,
       status: studentRoadmap.status,
@@ -369,9 +389,7 @@ export class RoadmapsService {
       completed_at: studentRoadmap.completed_at,
       progress_percent: percent,
       roadmap: this.mapRoadmapTemplate(roadmap),
-      steps: roadmap.steps
-        .filter((step) => step.is_active === 1)
-        .sort((a, b) => a.step_order - b.step_order)
+      steps: stepsToShow
         .map((step) => {
           const enhancedStep = this.enhanceRoadmapStep(roadmap, step);
           return {
@@ -410,6 +428,42 @@ export class RoadmapsService {
     };
   }
 
+  private async syncProgressWithCurrentStepLimit(studentRoadmap: StudentRoadmap, roadmap: RoadmapMaster) {
+    const stepLimit = await this.getRoadmapStepLimitSetting();
+    const selectedSteps = roadmap.steps
+      .filter((step) => step.is_active === 1)
+      .sort((a, b) => a.step_order - b.step_order)
+      .slice(0, stepLimit);
+
+    const selectedDetails = selectedSteps
+      .flatMap((step) => step.details ?? [])
+      .filter((detail) => detail.is_active === 1);
+
+    if (!selectedDetails.length) return;
+
+    const existingRows = await this.progressRepo.find({
+      where: { id_student_roadmap: studentRoadmap.id_student_roadmap },
+    });
+    const existingDetailIds = new Set(existingRows.map((row) => row.id_roadmap_step_detail));
+
+    const rowsToCreate = selectedDetails
+      .filter((detail) => !existingDetailIds.has(detail.id_roadmap_step_detail))
+      .map((detail) =>
+        this.progressRepo.create({
+          id_student_roadmap: studentRoadmap.id_student_roadmap,
+          studentRoadmap,
+          id_roadmap_step_detail: detail.id_roadmap_step_detail,
+          detail,
+          status: 'belum',
+          completed_at: null,
+        }),
+      );
+
+    if (rowsToCreate.length) {
+      await this.progressRepo.save(rowsToCreate);
+    }
+  }
+
   private async refreshStudentRoadmapStatus(studentRoadmapId: number) {
     const [roadmap, rows] = await Promise.all([
       this.studentRoadmapRepo.findOne({ where: { id_student_roadmap: studentRoadmapId } }),
@@ -423,6 +477,27 @@ export class RoadmapsService {
     roadmap.completed_at = allDone ? new Date() : null;
     await this.studentRoadmapRepo.save(roadmap);
   }
+
+  private async ensureAppSettingsTable() {
+    await this.dataSource.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        setting_key VARCHAR(100) NOT NULL PRIMARY KEY,
+        setting_value TEXT NULL,
+        description TEXT NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+  }
+
+  private async getRoadmapStepLimitSetting() {
+    await this.ensureAppSettingsTable();
+    const rows = await this.dataSource.query(
+      `SELECT setting_value FROM app_settings WHERE setting_key = 'roadmap_step_limit' LIMIT 1`,
+    );
+    const value = Number(rows?.[0]?.setting_value ?? 4);
+    return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), 1), 12) : 4;
+  }
+
 
 
 

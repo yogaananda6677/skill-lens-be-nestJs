@@ -528,10 +528,21 @@ export class GuruService {
       nilaiBySiswa.set(row.id_siswa, group);
     }
 
-    const [{ runs: latestRunByStudent, results: resultsByRun }, activeRoadmaps] = await Promise.all([
+    const [{ runs: latestRunByStudent, results: resultsByRun }, activeRoadmaps, latestGuidanceNotes] = await Promise.all([
       this.getLatestRecommendationsByStudentIds(siswaIds),
       this.getActiveRoadmapsByStudentIds(siswaIds),
+      this.guidanceNoteRepo.find({
+        where: { id_siswa: In(siswaIds) } as any,
+        order: { created_at: 'DESC' } as any,
+      }),
     ]);
+
+    const latestNoteByStudent = new Map<number, GuidanceNote>();
+    for (const note of latestGuidanceNotes) {
+      if (!latestNoteByStudent.has(note.id_siswa)) {
+        latestNoteByStudent.set(note.id_siswa, note);
+      }
+    }
 
     const progressByRoadmap = await this.getProgressPercentByStudentRoadmapIds(
       Array.from(activeRoadmaps.values()).map((row) => row.id_student_roadmap),
@@ -558,6 +569,14 @@ export class GuruService {
       const roadmapProgress = activeRoadmap
         ? (progressByRoadmap.get(activeRoadmap.id_student_roadmap) ?? 0)
         : 0;
+      const latestNote = latestNoteByStudent.get(item.id_siswa) ?? null;
+      const lastNoteText = latestNote
+        ? `${latestNote.topic}: ${latestNote.note}`
+        : activeRoadmap
+          ? 'Roadmap siswa sudah aktif. Buka chat untuk memberi arahan pada tahap yang sedang berjalan.'
+          : latestRun
+            ? 'Siswa sudah mendapatkan rekomendasi. Arahkan siswa memilih roadmap yang paling sesuai.'
+            : 'Belum ada chat bimbingan terbaru.';
 
       return {
         id: `g-${item.id_siswa}`,
@@ -586,9 +605,8 @@ export class GuruService {
         selectedRoadmapId: activeRoadmap?.id_roadmap ?? null,
         selectedRoadmapTitle: activeRoadmap?.roadmap?.title ?? selectedRecommendation?.title ?? null,
         hasActiveRoadmap: Boolean(activeRoadmap),
-        lastNote: avg
-          ? `Rata-rata kategori akademik ${avg}. Validasi rekomendasi dilakukan melalui layanan SPK Python.`
-          : 'Data nilai belum lengkap.',
+        lastNote: lastNoteText,
+        latestNoteAt: latestNote?.created_at ?? null,
         progress: activeRoadmap ? roadmapProgress : 0,
       };
     });

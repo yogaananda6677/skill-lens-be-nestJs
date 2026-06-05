@@ -25,7 +25,7 @@ import type {
 export class NilaiSiswaController {
   constructor(private readonly nilaiSiswaService: NilaiSiswaService) {}
 
-  @UseGuards(JwtAuthGuard, new RoleGuard(['guru', 'admin_sekolah', 'admin', 'superadmin']))
+  @UseGuards(JwtAuthGuard, new RoleGuard(['admin_sekolah', 'admin', 'superadmin']))
   @Post('import-excel')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024 } }))
   importExcel(

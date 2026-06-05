@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoleGuard } from '../auth/role';
@@ -21,6 +21,21 @@ export class AdminController {
   @Put('verifikasi/:id')
   verifikasi(@Param('id') id: string) {
     return this.adminService.verifikasiSekolah(Number(id));
+  }
+
+  @Put('verifikasi/:id/reject')
+  rejectSekolah(@Param('id') id: string, @Body() body: any) {
+    return this.adminService.tolakSekolah(Number(id), body?.reason ?? body?.alasan);
+  }
+
+  @Put('settings/roadmap-count')
+  updateRoadmapCount(@Body() body: any) {
+    return this.adminService.updateRoadmapCount(body?.count ?? body?.top_n ?? body?.jumlah);
+  }
+
+  @Put('settings/roadmap-step-limit')
+  updateRoadmapStepLimit(@Body() body: any) {
+    return this.adminService.updateRoadmapStepLimit(body?.count ?? body?.limit ?? body?.jumlah_tahap ?? body?.step_limit);
   }
 
   @Get('sekolah')

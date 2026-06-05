@@ -27,7 +27,7 @@ import {
   type AcademicCategory,
 } from '../nilai_siswa/constants/academic-categories';
 
-type SchoolStatus = 'none' | 'pending' | 'approved';
+type SchoolStatus = 'none' | 'pending' | 'approved' | 'rejected';
 
 @Injectable()
 export class AdminSekolahService {
@@ -385,6 +385,7 @@ export class AdminSekolahService {
         id_sekolah: null,
         nama_sekolah: null,
         jenis_sekolah: null,
+        rejection_reason: null,
         message: 'Admin sekolah belum mengajukan data sekolah.',
       };
     }
@@ -397,10 +398,13 @@ export class AdminSekolahService {
       id_sekolah: sekolah.id_sekolah,
       nama_sekolah: sekolah.nama_sekolah,
       jenis_sekolah: sekolah.jenis_sekolah,
+      rejection_reason: sekolah.rejection_reason ?? null,
       message:
         status === 'approved'
           ? 'Sekolah sudah diverifikasi. Fitur guru dan import siswa sudah aktif.'
-          : 'Pengajuan sekolah menunggu verifikasi superadmin.',
+          : status === 'rejected'
+            ? `Pengajuan sekolah ditolak. Alasan: ${sekolah.rejection_reason || 'Silakan perbaiki data dan ajukan ulang.'}`
+            : 'Pengajuan sekolah menunggu verifikasi superadmin.',
     };
   }
 
@@ -429,7 +433,7 @@ export class AdminSekolahService {
         where: { npsn },
       });
 
-      if (duplicateNpsn) {
+      if (duplicateNpsn && duplicateNpsn.id_sekolah !== currentSchool?.id_sekolah) {
         throw new ConflictException('NPSN sudah digunakan oleh sekolah lain.');
       }
     }
@@ -438,19 +442,32 @@ export class AdminSekolahService {
       | 'SMA'
       | 'SMK';
 
-    const sekolahData = this.sekolahRepo.create({
-      nama_sekolah: this.clean(dto.nama_sekolah),
-      npsn: npsn || null,
-      alamat: this.clean(dto.alamat) || null,
-      no_hp_sekolah: this.normalizePhone(dto.no_telp) || null,
-      jenis_sekolah: jenisSekolah,
-      status_verifikasi: 'pending',
-    });
+    let sekolah: Sekolah;
 
-    const sekolah = await this.sekolahRepo.save(sekolahData);
+    if (currentSchool?.status_verifikasi === 'rejected') {
+      currentSchool.nama_sekolah = this.clean(dto.nama_sekolah);
+      currentSchool.npsn = npsn || null;
+      currentSchool.alamat = this.clean(dto.alamat) || null;
+      currentSchool.no_hp_sekolah = this.normalizePhone(dto.no_telp) || null;
+      currentSchool.jenis_sekolah = jenisSekolah;
+      currentSchool.status_verifikasi = 'pending';
+      currentSchool.rejection_reason = null;
+      sekolah = await this.sekolahRepo.save(currentSchool);
+    } else {
+      const sekolahData = this.sekolahRepo.create({
+        nama_sekolah: this.clean(dto.nama_sekolah),
+        npsn: npsn || null,
+        alamat: this.clean(dto.alamat) || null,
+        no_hp_sekolah: this.normalizePhone(dto.no_telp) || null,
+        jenis_sekolah: jenisSekolah,
+        status_verifikasi: 'pending',
+        rejection_reason: null,
+      });
 
-    admin.id_sekolah = sekolah.id_sekolah;
-    await this.userRepo.save(admin);
+      sekolah = await this.sekolahRepo.save(sekolahData);
+      admin.id_sekolah = sekolah.id_sekolah;
+      await this.userRepo.save(admin);
+    }
 
     return {
       message:
@@ -526,7 +543,7 @@ export class AdminSekolahService {
         password: await bcrypt.hash(nip, 12),
         role: 'guru',
         id_sekolah: sekolah.id_sekolah,
-        must_change_password: 0,
+        must_change_password: 1,
       }),
     );
 
@@ -752,7 +769,9 @@ export class AdminSekolahService {
     const skip = (page - 1) * limit;
 
     const keyword = this.clean(query?.keyword);
-    const idJurusan = Number(query?.id_jurusan ?? 0);
+    const rawIdJurusan = query?.id_jurusan ?? query?.idJurusan ?? query?.jurusanId ?? 0;
+    const idJurusan = Number(rawIdJurusan);
+    const requestedJurusanName = this.clean(query?.jurusan ?? query?.nama_jurusan ?? query?.jurusan_name);
     const kelas = this.clean(query?.kelas);
 
     const qb = this.siswaRepo
@@ -770,7 +789,7 @@ export class AdminSekolahService {
       );
     }
 
-    if (idJurusan) {
+    if (Number.isFinite(idJurusan) && idJurusan > 0) {
       const selectedJurusan = await this.jurusanRepo.findOne({
         where: {
           id_jurusan: idJurusan,
@@ -778,7 +797,7 @@ export class AdminSekolahService {
         },
       });
 
-      const selectedJurusanName = this.clean(selectedJurusan?.nama_jurusan);
+      const selectedJurusanName = this.clean(selectedJurusan?.nama_jurusan) || requestedJurusanName;
 
       if (selectedJurusanName) {
         qb.andWhere(
@@ -793,6 +812,10 @@ export class AdminSekolahService {
           idJurusan,
         });
       }
+    } else if (requestedJurusanName) {
+      qb.andWhere('LOWER(TRIM(siswa.jurusan)) = LOWER(TRIM(:requestedJurusanName))', {
+        requestedJurusanName,
+      });
     }
 
     if (kelas) {

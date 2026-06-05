@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { AiReasonPolisherService } from '../../ai/ai-reason-polisher.service';
 import { RecommendationsService } from '../../recommendations/recommendations.service';
@@ -22,7 +22,27 @@ export class SiswaSpkService {
     private readonly siswaProfileService: SiswaProfileService,
     private readonly recommendationsService: RecommendationsService,
     private readonly aiReasonPolisherService: AiReasonPolisherService,
+    private readonly dataSource: DataSource,
   ) {}
+
+  private async getConfiguredTopN(fallback = 3) {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          setting_key VARCHAR(100) NOT NULL PRIMARY KEY,
+          setting_value TEXT NULL,
+          description TEXT NULL,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      const rows = await this.dataSource.query(
+        `SELECT setting_value FROM app_settings WHERE setting_key = 'recommendation_top_n' LIMIT 1`,
+      );
+      return this.normalizeTopN(rows?.[0]?.setting_value ?? fallback);
+    } catch {
+      return this.normalizeTopN(fallback);
+    }
+  }
 
   async prosesSpk(userId: number, body: any) {
     /**
@@ -60,6 +80,8 @@ export class SiswaSpkService {
       body?.tujuan_karir ?? siswaDto.tujuan ?? 'kuliah',
     );
 
+    const configuredTopN = 3;
+
     const payload = {
       id_siswa: siswaDto.id_siswa,
       nisn: siswaDto.nisn,
@@ -73,7 +95,7 @@ export class SiswaSpkService {
         'SMA',
 
       jurusan_sekolah: siswaDto.jurusan,
-      top_n: this.normalizeTopN(body?.top_n ?? 3),
+      top_n: configuredTopN,
 
       ...nilaiAkademik,
 

@@ -290,6 +290,17 @@ export class NilaiSiswaService {
       // Ini mencegah metadata Excel lama memakai id_jurusan yang sudah tidak ada.
       options.jurusan = jurusan.nama_jurusan;
     }
+    if (isSma && isMultiSemester && !options.jurusan && options.sekolahId) {
+      const jurusanRows = await this.dataSource.getRepository(Jurusan).find({
+        where: { id_sekolah: options.sekolahId },
+        order: { id_jurusan: 'ASC' } as any,
+      });
+
+      if (jurusanRows.length === 1) {
+        options.jurusanId = jurusanRows[0].id_jurusan;
+        options.jurusan = jurusanRows[0].nama_jurusan;
+      }
+    }
 
     const { weights: semesterWeights, warnings: weightWarnings } =
       parseSemesterWeights(options.semesterWeights);

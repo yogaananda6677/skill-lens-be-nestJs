@@ -19,10 +19,13 @@ export class Sekolah {
 
   @Column({
     type: 'enum',
-    enum: ['pending', 'approved'],
+    enum: ['pending', 'approved', 'rejected'],
     default: 'pending',
   })
-  status_verifikasi!: 'pending' | 'approved';
+  status_verifikasi!: 'pending' | 'approved' | 'rejected';
+
+  @Column({ type: 'text', nullable: true })
+  rejection_reason!: string | null;
 
   @Column({
     type: 'enum',

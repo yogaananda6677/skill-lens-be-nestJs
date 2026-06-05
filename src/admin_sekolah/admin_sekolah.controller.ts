@@ -167,7 +167,7 @@ export class AdminSekolahController {
 
       return this.nilaiSiswaService.importExcel(file, {
         sekolahId: sekolah.id_sekolah,
-        jurusanId: isSma ? null : idJurusan,
+        jurusanId: idJurusan || null,
         semester: null,
         jenisSekolah,
         tujuanKarir: 'kuliah',
@@ -266,7 +266,7 @@ export class AdminSekolahController {
         sekolahId: sekolah.id_sekolah,
         jenisSekolah,
         mode: mode || (isSma ? 'sma_multi_jurusan' : 'smk_per_jurusan'),
-        jurusanId: isSma ? null : idJurusan,
+        jurusanId: idJurusan || null,
         semesterStart: isSma ? Number(semesterStart || 1) : 1,
         semesterEnd: isSma ? Number(semesterEnd || 6) : 6,
       } as any);

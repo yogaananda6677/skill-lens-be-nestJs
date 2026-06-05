@@ -158,6 +158,42 @@ async function resetMasterSpkTables(connection: mysql.Connection) {
   console.log('[SEED] Reset selesai.');
 }
 
+async function ensureRevisiSchema(connection: mysql.Connection) {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key VARCHAR(100) NOT NULL PRIMARY KEY,
+      setting_value TEXT NULL,
+      description TEXT NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  await connection.query(`
+    INSERT INTO app_settings (setting_key, setting_value, description)
+    VALUES ('recommendation_top_n', '3', 'Jumlah rekomendasi/roadmap yang ditampilkan kepada siswa')
+    ON DUPLICATE KEY UPDATE setting_key = setting_key
+  `);
+
+  if (await tableExists(connection, 'sekolah')) {
+    await connection.query(`
+      ALTER TABLE sekolah
+      MODIFY COLUMN status_verifikasi ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending'
+    `).catch(() => undefined);
+
+    const [cols] = await connection.query<any[]>(`
+      SELECT COUNT(*) AS total
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'sekolah'
+        AND COLUMN_NAME = 'rejection_reason'
+    `);
+
+    if (Number(cols?.[0]?.total ?? 0) === 0) {
+      await connection.query(`ALTER TABLE sekolah ADD COLUMN rejection_reason TEXT NULL`);
+    }
+  }
+}
+
 async function cleanupMasterTags(connection: mysql.Connection) {
   if (!(await tableExists(connection, 'master_tags'))) return;
 
@@ -223,6 +259,7 @@ async function main() {
     }
 
     await cleanupMasterTags(connection);
+    await ensureRevisiSchema(connection);
 
     console.log('[SEED] SkillLens seed selesai dijalankan.');
   } finally {
