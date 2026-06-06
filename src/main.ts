@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from './app.module';
 
@@ -15,7 +16,13 @@ async function bootstrap() {
     }),
   );
 
-  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+  const uploadPath = join(process.cwd(), 'uploads');
+
+  if (!existsSync(uploadPath)) {
+    mkdirSync(uploadPath, { recursive: true });
+  }
+
+  app.useStaticAssets(uploadPath, {
     prefix: '/uploads/',
   });
 
@@ -28,6 +35,11 @@ async function bootstrap() {
     credentials: true,
   });
 
-  await app.listen(Number(process.env.PORT ?? 3000));
+  const port = Number(process.env.PORT || 3000);
+
+  await app.listen(port, '0.0.0.0');
+
+  console.log(`SkillLens API running on port ${port}`);
 }
+
 bootstrap();
