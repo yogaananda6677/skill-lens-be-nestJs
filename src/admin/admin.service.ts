@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Not, Repository } from 'typeorm';
 
 import { Sekolah } from '../sekolah/entities/sekolah.entity';
 import { User } from '../user/entities/user.entity';
@@ -114,6 +114,7 @@ export class AdminService {
 
   async verifications() {
     const rows = await this.sekolahRepo.find({
+      where: { status_verifikasi: Not('approved') },
       order: { id_sekolah: 'DESC' },
     });
 
@@ -138,11 +139,27 @@ export class AdminService {
     return rows.map((row) => ({
       id: row.id_sekolah,
       name: row.nama_sekolah,
+      npsn: row.npsn ?? '-',
       level: row.jenis_sekolah ?? '-',
       status: row.status_verifikasi,
       address: row.alamat ?? '-',
       phone: row.no_hp_sekolah ?? '-',
     }));
+  }
+
+
+  async deleteSchool(id: number) {
+    const sekolah = await this.sekolahRepo.findOne({ where: { id_sekolah: id } });
+    if (!sekolah) {
+      throw new NotFoundException('Sekolah tidak ditemukan.');
+    }
+
+    try {
+      await this.sekolahRepo.delete(id);
+      return { message: 'Sekolah berhasil dihapus.', data: { id } };
+    } catch {
+      throw new BadRequestException('Sekolah tidak bisa dihapus karena masih terhubung dengan data guru atau siswa.');
+    }
   }
 
   async verifikasiSekolah(id: number) {

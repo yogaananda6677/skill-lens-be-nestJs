@@ -1,0 +1,57 @@
+## License
+
+This project is licensed under the MIT License.
+
+Copyright © 2026 VisionaryLens Team.
+
+## Third-Party Libraries
+
+| Library            | Usage                         | License    |
+| ------------------ | ----------------------------- | ---------- |
+| NestJS             | Backend framework             | MIT        |
+| TypeORM            | Database ORM                  | MIT        |
+| MySQL2             | MySQL driver                  | MIT        |
+| Bcrypt             | Password hashing              | MIT        |
+| JWT / Passport JWT | Authentication                | MIT        |
+| Class Validator    | DTO validation                | MIT        |
+| Class Transformer  | DTO transformation            | MIT        |
+| Multer             | File upload                   | MIT        |
+| Nodemailer         | Email and OTP                 | MIT        |
+| ExcelJS            | Export Excel / template Excel | MIT        |
+| XLSX               | Import and read Excel file    | Apache-2.0 |
+| Google GenAI SDK   | Optional AI reason polishing  | Apache-2.0 |
+
+Each third-party library follows its own license.
+
+## Requirements
+
+- Node.js 20 LTS or newer
+- npm or pnpm
+- MySQL or MariaDB
+- SMTP email account for OTP / forgot password
+- SPK service API running separately
+
+## Main Features
+
+- JWT authentication
+- Role-based access control
+- Password hashing with bcrypt
+- School verification
+- Student profile management
+- Teacher management
+- Excel import for student scores
+- Excel template export
+- Roadmap master management
+- Student roadmap progress
+- Guru BK guidance notes
+- Integration with SPK recommendation service
+
+## Developed By
+
+VisionaryLens Team
+
+## Related Repositories
+
+- Frontend: SkillLens Frontend
+- Backend: SkillLens Backend
+- Recommendation Service: SkillLens SPK Service

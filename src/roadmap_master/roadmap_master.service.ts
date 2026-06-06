@@ -13,6 +13,20 @@ export class RoadmapMasterService {
     private readonly roadmapRepo: Repository<RoadmapMaster>,
   ) {}
 
+  private onlyActiveChildren(roadmap: RoadmapMaster) {
+    roadmap.steps = (roadmap.steps ?? [])
+      .filter((step) => step.is_active === 1)
+      .sort((a, b) => a.step_order - b.step_order)
+      .map((step) => {
+        step.details = (step.details ?? [])
+          .filter((detail) => detail.is_active === 1)
+          .sort((a, b) => a.detail_order - b.detail_order);
+        return step;
+      });
+
+    return roadmap;
+  }
+
   create(dto: CreateRoadmapMasterDto) {
     const roadmap = this.roadmapRepo.create({
       title: dto.title.trim(),
@@ -26,14 +40,17 @@ export class RoadmapMasterService {
     return this.roadmapRepo.save(roadmap);
   }
 
-  findAll() {
-    return this.roadmapRepo.find({
+  async findAll() {
+    const roadmaps = await this.roadmapRepo.find({
+      where: { is_active: 1 },
       relations: ['steps', 'steps.details'],
       order: {
         id_roadmap: 'DESC',
         steps: { step_order: 'ASC', details: { detail_order: 'ASC' } },
       } as any,
     });
+
+    return roadmaps.map((roadmap) => this.onlyActiveChildren(roadmap));
   }
 
   async findOne(id: number) {
@@ -49,7 +66,7 @@ export class RoadmapMasterService {
       throw new NotFoundException('Roadmap tidak ditemukan.');
     }
 
-    return roadmap;
+    return this.onlyActiveChildren(roadmap);
   }
 
   async update(id: number, dto: UpdateRoadmapMasterDto) {

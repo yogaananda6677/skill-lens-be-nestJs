@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateRoadmapStepDto {
   @IsInt()
@@ -27,4 +27,9 @@ export class CreateRoadmapStepDto {
   @IsString()
   @MaxLength(180)
   output_target?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
+

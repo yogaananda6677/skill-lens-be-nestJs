@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, MaxLength, Min, IsUrl } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, IsUrl } from 'class-validator';
 
 export class CreateRoadmapStepDetailDto {
   @IsInt()
@@ -26,4 +26,8 @@ export class CreateRoadmapStepDetailDto {
   @IsInt()
   @Min(1)
   detail_order?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }

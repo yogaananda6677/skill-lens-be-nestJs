@@ -28,13 +28,17 @@ export class RoadmapStepDetailService {
       reference_link: dto.reference_link?.trim() || null,
       reference_type: dto.reference_type?.trim() || null,
       detail_order: dto.detail_order ?? 1,
-      is_active: 1,
+      is_active: dto.is_active === false ? 0 : 1,
     });
     return this.detailRepo.save(detail);
   }
 
   findAll() {
-    return this.detailRepo.find({ relations: ['step', 'step.roadmap'], order: { id_roadmap_step: 'ASC', detail_order: 'ASC' } });
+    return this.detailRepo.find({
+      where: { is_active: 1 },
+      relations: ['step', 'step.roadmap'],
+      order: { id_roadmap_step: 'ASC', detail_order: 'ASC' },
+    });
   }
 
   async findOne(id: number) {
@@ -53,6 +57,7 @@ export class RoadmapStepDetailService {
     if (dto.reference_link !== undefined) detail.reference_link = dto.reference_link?.trim() || null;
     if (dto.reference_type !== undefined) detail.reference_type = dto.reference_type?.trim() || null;
     if (dto.detail_order !== undefined) detail.detail_order = dto.detail_order;
+    if (dto.is_active !== undefined) detail.is_active = dto.is_active ? 1 : 0;
     return this.detailRepo.save(detail);
   }
 

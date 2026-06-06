@@ -11,6 +11,7 @@ export class CreateRoadmapMasterDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['teknologi', 'akademik', 'karier', 'praktik', 'bisnis', 'kreatif'])
   @MaxLength(120)
   category?: string;
 
