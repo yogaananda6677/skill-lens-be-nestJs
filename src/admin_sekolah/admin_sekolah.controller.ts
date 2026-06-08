@@ -335,6 +335,11 @@ export class AdminSekolahController {
     return res.send(buffer);
   }
 
+  @Get('nilai-matrix')
+  listNilaiMatrix(@Req() req: any, @Query() query: any) {
+    return this.adminSekolahService.listNilaiMatrix(req.user.id, query);
+  }
+
   @Get('siswa/:id/nilai')
   getNilaiSiswa(@Param('id') id: string, @Req() req: any) {
     return this.adminSekolahService.getNilaiSiswa(Number(id), req.user.id);

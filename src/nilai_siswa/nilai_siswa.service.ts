@@ -437,27 +437,37 @@ export class NilaiSiswaService {
       throw new BadRequestException('ID siswa tidak valid.');
     }
 
-    const existingCount = await this.kategoriRepo.count({
-      where: { id_siswa: idSiswa },
-    });
-
-    if (!force && existingCount >= NILAI_AKADEMIK_CATEGORIES.length) {
-      return {
-        status: 'skipped',
-        created: 0,
-        updated: 0,
-      };
-    }
-
     const nilaiRepo = this.dataSource.getRepository(NilaiSiswa);
     const siswaRepo = this.dataSource.getRepository(Siswa);
 
     const siswa = await siswaRepo.findOne({
       where: { id_siswa: idSiswa },
+      relations: ['sekolah'],
     });
 
     if (!siswa) {
       throw new NotFoundException('Data siswa tidak ditemukan.');
+    }
+
+    const jenisSekolah = String(siswa.sekolah?.jenis_sekolah || 'SMA').toUpperCase();
+
+    if (!force) {
+      const existingRows = await this.kategoriRepo.find({
+        where: { id_siswa: idSiswa },
+      });
+      const isComplete = existingRows.length >= NILAI_AKADEMIK_CATEGORIES.length;
+      const praktikRow = existingRows.find((row) => row.kategori === 'praktik');
+      const shouldRegenerateSmkPraktik =
+        jenisSekolah === 'SMK' &&
+        (!praktikRow || Number(praktikRow.jumlah_mapel_terpakai || 0) === 0);
+
+      if (isComplete && !shouldRegenerateSmkPraktik) {
+        return {
+          status: 'skipped',
+          created: 0,
+          updated: 0,
+        };
+      }
     }
 
     const rawRows = await nilaiRepo.find({
@@ -488,9 +498,14 @@ export class NilaiSiswaService {
         mapel?.semester ||
         1;
 
-      const kategori =
-        (mapel?.kategori as AcademicCategory | null) ||
-        classifySubject(mapel?.nama_mapel || '').kategori;
+      const kategori = this.resolvePersistedMapelCategory({
+        mapelName: mapel?.nama_mapel || '',
+        storedCategory: mapel?.kategori as AcademicCategory | null,
+        jenisSekolah,
+        tipeMapel: mapel?.tipe_mapel,
+        idJurusan:
+          row.kurikulum_mapel?.id_jurusan ?? mapel?.id_jurusan ?? siswa.id_jurusan,
+      });
 
       if (!buckets[semester]) {
         buckets[semester] = this.createEmptyBuckets();
@@ -888,7 +903,14 @@ private createMetaSheet(
 
       const headerRow = rows[headerRowIndex];
       const columns = this.resolveIdentityColumns(headerRow);
-      const subjectColumns = buildSubjectColumns(headerRow);
+      const subjectColumns = buildSubjectColumns(headerRow).map((subject) =>
+        this.resolveSubjectColumnForImport(subject, {
+          jenisSekolah,
+          sheetJurusan,
+          jurusanId: sheetJurusanId,
+          options,
+        }),
+      );
 
       if (columns.nisn < 0 || columns.nama < 0) {
         warnings.push(
@@ -971,6 +993,134 @@ private createMetaSheet(
       totalGrades,
       warnings,
     };
+  }
+
+  private resolveSubjectColumnForImport(
+    subject: SubjectColumnMeta,
+    params: {
+      jenisSekolah: string;
+      sheetJurusan?: string | null;
+      jurusanId?: number | null;
+      options?: ImportNilaiExcelOptions;
+    },
+  ): SubjectColumnMeta {
+    if (!this.shouldUsePraktikCategoryForSubject(subject, params)) {
+      return subject;
+    }
+
+    return {
+      ...subject,
+      kategori: 'praktik',
+      matchedBy: subject.matchedBy
+        ? `smk_praktik:${subject.matchedBy}`
+        : 'smk_praktik:jurusan',
+    };
+  }
+
+  private resolvePersistedMapelCategory(params: {
+    mapelName: string;
+    storedCategory?: AcademicCategory | null;
+    jenisSekolah?: string | null;
+    tipeMapel?: 'umum' | 'jurusan' | string | null;
+    idJurusan?: number | null;
+  }): AcademicCategory {
+    const classified = classifySubject(params.mapelName || '');
+    const storedCategory = params.storedCategory || classified.kategori;
+
+    if (storedCategory === 'praktik') {
+      return 'praktik';
+    }
+
+    const jenisSekolah = String(params.jenisSekolah || '').toUpperCase();
+    const isSmk = jenisSekolah === 'SMK';
+    const hasJurusanContext =
+      Boolean(params.idJurusan) || params.tipeMapel === 'jurusan';
+
+    if (!isSmk || !hasJurusanContext) {
+      return storedCategory;
+    }
+
+    const key = normalizeSubjectKey(params.mapelName);
+
+    if (this.isGeneralSchoolSubject(key)) {
+      return storedCategory;
+    }
+
+    return 'praktik';
+  }
+
+  private shouldUsePraktikCategoryForSubject(
+    subject: SubjectColumnMeta,
+    params: {
+      jenisSekolah: string;
+      sheetJurusan?: string | null;
+      jurusanId?: number | null;
+      options?: ImportNilaiExcelOptions;
+    },
+  ): boolean {
+    if (subject.kategori === 'praktik') return true;
+
+    const jenisSekolah = String(params.jenisSekolah || '').toUpperCase();
+    if (jenisSekolah !== 'SMK') return false;
+
+    const hasJurusanContext = Boolean(
+      params.sheetJurusan || params.jurusanId || params.options?.jurusanId || params.options?.jurusan,
+    );
+
+    if (!hasJurusanContext) return false;
+
+    const key = normalizeSubjectKey(subject.mapel || subject.header || subject.key);
+
+    if (this.isGeneralSchoolSubject(key)) return false;
+
+    return true;
+  }
+
+  private isGeneralSchoolSubject(normalizedSubjectKey: string): boolean {
+    const key = normalizeSubjectKey(normalizedSubjectKey);
+
+    if (!key) return true;
+
+    const exactGeneralSubjects = new Set([
+      'matematika',
+      'matematika wajib',
+      'bahasa indonesia',
+      'b indonesia',
+      'bahasa inggris',
+      'b inggris',
+      'bahasa arab',
+      'pendidikan agama',
+      'pendidikan agama islam',
+      'pai',
+      'agama islam',
+      'pendidikan pancasila',
+      'ppkn',
+      'pkn',
+      'sejarah',
+      'sejarah indonesia',
+      'pjok',
+      'penjas',
+      'pendidikan jasmani olahraga dan kesehatan',
+      'bimbingan konseling',
+      'bk',
+      'p5',
+      'projek penguatan profil pelajar pancasila',
+      'seni budaya',
+    ]);
+
+    if (exactGeneralSubjects.has(key)) return true;
+
+    return [
+      'bahasa ',
+      'pendidikan agama',
+      'pancasila',
+      'kewarganegaraan',
+      'jasmani',
+      'olahraga',
+      'sejarah',
+      'bimbingan konseling',
+      'profil pelajar',
+    ].some((keyword) => key.includes(keyword));
   }
 
   private findHeaderRowIndex(rows: unknown[][]): number {
@@ -1759,7 +1909,7 @@ private createMetaSheet(
         mapel.tipe_mapel !== tipeMapel ||
         mapel.id_jurusan !== effectiveJurusanId;
 
-      mapel.kategori = mapel.kategori || grade.kategori;
+      mapel.kategori = grade.kategori;
       mapel.semester = grade.semester;
       mapel.id_semester = semesterEntity.id_semester;
       mapel.semester_detail = semesterEntity;

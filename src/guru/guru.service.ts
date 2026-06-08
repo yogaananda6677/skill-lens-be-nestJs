@@ -673,6 +673,7 @@ export class GuruService {
         agama: 'Agama',
         kreativitas: 'Kreativitas',
         softskill: 'Softskill',
+        praktik: 'Praktik / Keahlian',
       };
       return labels[kategori] || kategori;
     }

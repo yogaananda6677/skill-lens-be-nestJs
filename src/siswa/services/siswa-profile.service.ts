@@ -628,6 +628,7 @@ export class SiswaProfileService {
       agama: 'Agama',
       kreativitas: 'Kreativitas',
       softskill: 'Softskill/P5',
+      praktik: 'Praktik / Keahlian',
     };
 
     return labels[kategori] || kategori;

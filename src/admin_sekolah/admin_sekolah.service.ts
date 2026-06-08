@@ -6,9 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Brackets, DataSource, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { IsNull } from 'typeorm';
 
 import { User } from '../user/entities/user.entity';
 import { Guru } from '../guru/entities/guru.entity';
@@ -60,6 +59,65 @@ export class AdminSekolahService {
   private cleanLower(value?: string | null) {
     return this.clean(value).toLowerCase();
   }
+
+  private applyKelasFilter(qb: any, alias: string, kelasValue?: string | null) {
+    const kelas = this.clean(kelasValue).toLowerCase();
+
+    if (!kelas) return;
+
+    const normalized = kelas.replace(/^kelas\s+/i, '').trim();
+    const romanByLevel: Record<string, string> = {
+      '10': 'x',
+      x: 'x',
+      '11': 'xi',
+      xi: 'xi',
+      '12': 'xii',
+      xii: 'xii',
+    };
+
+    const roman = romanByLevel[normalized];
+    const numberByRoman: Record<string, string> = {
+      x: '10',
+      xi: '11',
+      xii: '12',
+    };
+    const number = roman ? numberByRoman[roman] : normalized;
+
+    qb.andWhere(
+      new Brackets((whereQb) => {
+        whereQb.where(`LOWER(TRIM(${alias}.kelas)) = :kelasExact`, {
+          kelasExact: kelas,
+        });
+
+        if (roman && number) {
+          whereQb
+            .orWhere(`LOWER(TRIM(${alias}.kelas)) = :kelasRomanExact`, {
+              kelasRomanExact: roman,
+            })
+            .orWhere(`LOWER(${alias}.kelas) LIKE :kelasNumberContains`, {
+              kelasNumberContains: `%${number}%`,
+            })
+            .orWhere(`LOWER(${alias}.kelas) LIKE :kelasNumberPrefix`, {
+              kelasNumberPrefix: `kelas ${number}%`,
+            })
+            .orWhere(`LOWER(${alias}.kelas) LIKE :kelasRomanPrefix`, {
+              kelasRomanPrefix: `${roman} %`,
+            })
+            .orWhere(`LOWER(${alias}.kelas) LIKE :kelasRomanDash`, {
+              kelasRomanDash: `${roman}-%`,
+            })
+            .orWhere(`LOWER(${alias}.kelas) LIKE :kelasRomanWord`, {
+              kelasRomanWord: `kelas ${roman}%`,
+            });
+        } else {
+          whereQb.orWhere(`LOWER(${alias}.kelas) LIKE :kelasContains`, {
+            kelasContains: `%${kelas}%`,
+          });
+        }
+      }),
+    );
+  }
+
 
   private normalizeJurusanName(value?: string | null) {
     return this.clean(value).replace(/\s+/g, ' ').toUpperCase();
@@ -311,8 +369,8 @@ export class AdminSekolahService {
   private validateSemester(value: any) {
     const semester = Number(value);
 
-    if (!semester || ![1, 2, 3, 4, 5].includes(semester)) {
-      throw new BadRequestException('Semester harus dipilih antara 1 sampai 5.');
+    if (!semester || ![1, 2, 3, 4, 5, 6].includes(semester)) {
+      throw new BadRequestException('Semester harus dipilih antara 1 sampai 6.');
     }
 
     return semester;
@@ -818,11 +876,7 @@ export class AdminSekolahService {
       });
     }
 
-    if (kelas) {
-      qb.andWhere('siswa.kelas = :kelas', {
-        kelas,
-      });
-    }
+    this.applyKelasFilter(qb, 'siswa', kelas);
 
     const [rows, total] = await qb
       .orderBy('siswa.id_siswa', 'DESC')
@@ -851,16 +905,23 @@ export class AdminSekolahService {
 
   async listMataPelajaran(userId: number) {
     const sekolah = await this.getApprovedSchoolOrFail(userId);
+    const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
+    const isSma = jenisSekolah === 'SMA';
 
-    const rows = await this.mataPelajaranRepo
+    const mapelQb = this.mataPelajaranRepo
       .createQueryBuilder('mapel')
       .leftJoinAndSelect('mapel.jurusan', 'jurusan')
       .where('mapel.id_sekolah = :idSekolah', {
         idSekolah: sekolah.id_sekolah,
-      })
-      .orWhere('mapel.is_default = :isDefault', {
+      });
+
+    if (isSma) {
+      mapelQb.orWhere('mapel.is_default = :isDefault', {
         isDefault: true,
-      })
+      });
+    }
+
+    const rows = await mapelQb
       .orderBy('mapel.semester', 'ASC')
       .addOrderBy('mapel.nama_mapel', 'ASC')
       .getMany();
@@ -906,7 +967,9 @@ export class AdminSekolahService {
       throw new BadRequestException('Nama mata pelajaran maksimal 100 karakter.');
     }
 
-    const isSemesterUmum = semester === 1 || semester === 2;
+    const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
+    const isSma = jenisSekolah === 'SMA';
+    const isSemesterUmum = isSma && (semester === 1 || semester === 2);
     const tipeMapel: 'umum' | 'jurusan' = isSemesterUmum
       ? 'umum'
       : 'jurusan';
@@ -915,13 +978,15 @@ export class AdminSekolahService {
 
     if (isSemesterUmum && body?.id_jurusan) {
       throw new BadRequestException(
-        'Semester 1 dan 2 tidak boleh memilih jurusan.',
+        'Semester 1 dan 2 SMA tidak boleh memilih jurusan.',
       );
     }
 
     if (!isSemesterUmum && !idJurusan) {
       throw new BadRequestException(
-        'Semester 3, 4, dan 5 wajib memilih jurusan.',
+        isSma
+          ? 'Semester 3 sampai 6 wajib memilih jurusan.'
+          : 'Untuk SMK, semua semester wajib memilih jurusan.',
       );
     }
 
@@ -1004,7 +1069,9 @@ export class AdminSekolahService {
       throw new BadRequestException('Nama mata pelajaran maksimal 100 karakter.');
     }
 
-    const isSemesterUmum = semester === 1 || semester === 2;
+    const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
+    const isSma = jenisSekolah === 'SMA';
+    const isSemesterUmum = isSma && (semester === 1 || semester === 2);
     const tipeMapel: 'umum' | 'jurusan' = isSemesterUmum
       ? 'umum'
       : 'jurusan';
@@ -1013,13 +1080,15 @@ export class AdminSekolahService {
 
     if (isSemesterUmum && body?.id_jurusan) {
       throw new BadRequestException(
-        'Semester 1 dan 2 tidak boleh memilih jurusan.',
+        'Semester 1 dan 2 SMA tidak boleh memilih jurusan.',
       );
     }
 
     if (!isSemesterUmum && !idJurusan) {
       throw new BadRequestException(
-        'Semester 3, 4, dan 5 wajib memilih jurusan.',
+        isSma
+          ? 'Semester 3 sampai 6 wajib memilih jurusan.'
+          : 'Untuk SMK, semua semester wajib memilih jurusan.',
       );
     }
 
@@ -1093,6 +1162,13 @@ export class AdminSekolahService {
 
   async createDefaultMataPelajaranUmum(userId: number) {
     const sekolah = await this.getApprovedSchoolOrFail(userId);
+    const jenisSekolah = String(sekolah.jenis_sekolah || 'SMA').toUpperCase();
+
+    if (jenisSekolah !== 'SMA') {
+      throw new BadRequestException(
+        'Mapel umum default hanya tersedia untuk SMA. SMK wajib memilih jurusan pada setiap semester.',
+      );
+    }
 
     const defaultMapelUmum = [
       'Bahasa Indonesia',
@@ -1151,6 +1227,240 @@ export class AdminSekolahService {
     };
   }
 
+  async listNilaiMatrix(userId: number, query: any) {
+    const sekolah = await this.getApprovedSchoolOrFail(userId);
+
+    const page = Math.max(Number(query?.page ?? 1), 1);
+    const limit = Math.min(Math.max(Number(query?.limit ?? 10), 1), 50);
+    const skip = (page - 1) * limit;
+    const semesterNumber = Math.min(
+      Math.max(Number(query?.semester ?? 1), 1),
+      6,
+    );
+
+    const keyword = this.clean(query?.keyword);
+    const rawIdJurusan =
+      query?.id_jurusan ?? query?.idJurusan ?? query?.jurusanId ?? 0;
+    const idJurusan = Number(rawIdJurusan);
+    const requestedJurusanName = this.clean(
+      query?.jurusan ?? query?.nama_jurusan ?? query?.jurusan_name,
+    );
+    const kelas = this.clean(query?.kelas);
+
+    let selectedJurusanName = requestedJurusanName;
+
+    if (Number.isFinite(idJurusan) && idJurusan > 0) {
+      const selectedJurusan = await this.jurusanRepo.findOne({
+        where: {
+          id_jurusan: idJurusan,
+          id_sekolah: sekolah.id_sekolah,
+        },
+      });
+
+      selectedJurusanName =
+        this.clean(selectedJurusan?.nama_jurusan) || requestedJurusanName;
+    }
+
+    const semesterLike = `%${semesterNumber}%`;
+
+    const studentFilterQb = this.siswaRepo
+      .createQueryBuilder('siswa')
+      .innerJoin(NilaiSiswa, 'nilaiFilter', 'nilaiFilter.id_siswa = siswa.id_siswa')
+      .innerJoin('nilaiFilter.kurikulum_mapel', 'kurikulumFilter')
+      .innerJoin('kurikulumFilter.mata_pelajaran', 'mapelFilter')
+      .leftJoin('kurikulumFilter.semester', 'semesterFilter')
+      .leftJoin('siswa.user', 'user')
+      .where('siswa.id_sekolah = :idSekolah', {
+        idSekolah: sekolah.id_sekolah,
+      })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('mapelFilter.semester = :semesterNumber')
+            .orWhere('mapelFilter.id_semester = :semesterNumber')
+            .orWhere('kurikulumFilter.id_semester = :semesterNumber')
+            .orWhere('semesterFilter.nama_semester LIKE :semesterLike');
+        }),
+        { semesterNumber, semesterLike },
+      );
+
+    if (keyword) {
+      studentFilterQb.andWhere(
+        '(siswa.nisn LIKE :keyword OR user.nama LIKE :keyword OR user.username LIKE :keyword OR siswa.kelas LIKE :keyword OR siswa.jurusan LIKE :keyword)',
+        { keyword: `%${keyword}%` },
+      );
+    }
+
+    if (Number.isFinite(idJurusan) && idJurusan > 0) {
+      if (selectedJurusanName) {
+        studentFilterQb.andWhere(
+          '(siswa.id_jurusan = :idJurusan OR LOWER(TRIM(siswa.jurusan)) = LOWER(TRIM(:selectedJurusanName)))',
+          {
+            idJurusan,
+            selectedJurusanName,
+          },
+        );
+      } else {
+        studentFilterQb.andWhere('siswa.id_jurusan = :idJurusan', {
+          idJurusan,
+        });
+      }
+    } else if (requestedJurusanName) {
+      studentFilterQb.andWhere(
+        'LOWER(TRIM(siswa.jurusan)) = LOWER(TRIM(:requestedJurusanName))',
+        { requestedJurusanName },
+      );
+    }
+
+    this.applyKelasFilter(studentFilterQb, 'siswa', kelas);
+
+    const totalRaw = await studentFilterQb
+      .clone()
+      .select('COUNT(DISTINCT siswa.id_siswa)', 'total')
+      .getRawOne<{ total?: string | number }>();
+
+    const total = Number(totalRaw?.total ?? 0);
+
+    const idRows = await studentFilterQb
+      .clone()
+      .select('siswa.id_siswa', 'id_siswa')
+      .distinct(true)
+      .orderBy('siswa.id_siswa', 'DESC')
+      .offset(skip)
+      .limit(limit)
+      .getRawMany<{ id_siswa: number }>();
+
+    const siswaIds = idRows
+      .map((row) => Number(row.id_siswa))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (!siswaIds.length) {
+      return {
+        message: 'Data nilai berhasil dimuat.',
+        total,
+        page,
+        limit,
+        semester: semesterNumber,
+        mapel_columns: [],
+        data: [],
+      };
+    }
+
+    const siswaRows = await this.siswaRepo
+      .createQueryBuilder('siswa')
+      .leftJoinAndSelect('siswa.user', 'user')
+      .leftJoinAndSelect('siswa.jurusan_detail', 'jurusan')
+      .where('siswa.id_siswa IN (:...siswaIds)', { siswaIds })
+      .getMany();
+
+    const siswaOrder = new Map(siswaIds.map((id, index) => [id, index]));
+
+    siswaRows.sort(
+      (a, b) =>
+        (siswaOrder.get(a.id_siswa) ?? 0) - (siswaOrder.get(b.id_siswa) ?? 0),
+    );
+
+    const nilaiRows = await this.dataSource
+      .getRepository(NilaiSiswa)
+      .createQueryBuilder('nilai')
+      .innerJoinAndSelect('nilai.kurikulum_mapel', 'kurikulum')
+      .innerJoinAndSelect('kurikulum.mata_pelajaran', 'mapel')
+      .leftJoinAndSelect('kurikulum.semester', 'semester')
+      .where('nilai.id_siswa IN (:...siswaIds)', { siswaIds })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('mapel.semester = :semesterNumber')
+            .orWhere('mapel.id_semester = :semesterNumber')
+            .orWhere('kurikulum.id_semester = :semesterNumber')
+            .orWhere('semester.nama_semester LIKE :semesterLike');
+        }),
+        { semesterNumber, semesterLike },
+      )
+      .orderBy('mapel.nama_mapel', 'ASC')
+      .addOrderBy('nilai.id_nilai', 'ASC')
+      .getMany();
+
+    const labels: Record<string, string> = {
+      numerik: 'Numerik',
+      bahasa: 'Bahasa',
+      sains: 'Sains',
+      sosial: 'Sosial',
+      teknologi: 'Teknologi',
+      agama: 'Agama',
+      kreativitas: 'Kreativitas',
+      softskill: 'Softskill',
+      praktik: 'Praktik / Keahlian',
+    };
+
+    function parseSemesterName(value?: string | null) {
+      const match = String(value ?? '').match(/\d+/);
+      return match ? Number(match[0]) : null;
+    }
+
+    const nilaiBySiswa = new Map<number, any[]>();
+    const mapelColumns = new Map<string, string>();
+
+    for (const row of nilaiRows) {
+      const kurikulum = row.kurikulum_mapel;
+      const mapel = kurikulum?.mata_pelajaran;
+      const namaMapel = mapel?.nama_mapel?.trim();
+
+      if (!namaMapel) continue;
+
+      const kategori = (mapel?.kategori || 'softskill') as AcademicCategory;
+      const normalizedMapel = namaMapel.toLowerCase().trim();
+
+      if (!mapelColumns.has(normalizedMapel)) {
+        mapelColumns.set(normalizedMapel, namaMapel);
+      }
+
+      const semester =
+        mapel?.semester ??
+        mapel?.id_semester ??
+        kurikulum?.id_semester ??
+        parseSemesterName(kurikulum?.semester?.nama_semester) ??
+        semesterNumber;
+
+      const item = {
+        id_nilai: row.id_nilai,
+        id_kurikulum_mapel:
+          row.id_kurikulum_mapel ?? kurikulum?.id_kurikulum_mapel,
+        nama_mapel: namaMapel,
+        nilai: row.nilai,
+        semester,
+        kategori,
+        kategori_label: labels[kategori] || kategori,
+        id_jurusan: kurikulum?.id_jurusan ?? mapel?.id_jurusan ?? null,
+      };
+
+      const current = nilaiBySiswa.get(row.id_siswa) || [];
+      current.push(item);
+      nilaiBySiswa.set(row.id_siswa, current);
+    }
+
+    return {
+      message: 'Data nilai berhasil dimuat.',
+      total,
+      page,
+      limit,
+      semester: semesterNumber,
+      mapel_columns: Array.from(mapelColumns.values()).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+      data: siswaRows.map((siswa) => ({
+        id: siswa.id_siswa,
+        id_siswa: siswa.id_siswa,
+        nisn: siswa.nisn,
+        nama: siswa.user?.nama ?? '-',
+        username: siswa.user?.username ?? '-',
+        kelas: siswa.kelas,
+        jurusan: siswa.jurusan_detail?.nama_jurusan || siswa.jurusan || '-',
+        id_jurusan: siswa.id_jurusan,
+        status: 'Aktif',
+        nilai: nilaiBySiswa.get(siswa.id_siswa) || [],
+      })),
+    };
+  }
+
   async getNilaiSiswa(siswaId: number, userId: number) {
     const sekolah = await this.getApprovedSchoolOrFail(userId);
 
@@ -1197,6 +1507,7 @@ export class AdminSekolahService {
         agama: 'Agama',
         kreativitas: 'Kreativitas',
         softskill: 'Softskill',
+        praktik: 'Praktik / Keahlian',
       };
 
       return labels[kategori] || kategori;
