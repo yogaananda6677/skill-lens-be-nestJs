@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import * as ExcelJS from 'exceljs';
 
 import { User } from '../user/entities/user.entity';
 import { Guru } from '../guru/entities/guru.entity';
@@ -901,6 +902,291 @@ export class AdminSekolahService {
         status: 'Aktif',
       })),
     };
+  }
+
+
+  async exportSiswaCards(userId: number, query: any) {
+    const sekolah = await this.getApprovedSchoolOrFail(userId);
+
+    const keyword = this.clean(query?.keyword);
+    const rawIdJurusan =
+      query?.id_jurusan ?? query?.idJurusan ?? query?.jurusanId ?? 0;
+    const idJurusan = Number(rawIdJurusan);
+    const requestedJurusanName = this.clean(
+      query?.jurusan ?? query?.nama_jurusan ?? query?.jurusan_name,
+    );
+    const kelas = this.clean(query?.kelas);
+
+    const qb = this.siswaRepo
+      .createQueryBuilder('siswa')
+      .leftJoinAndSelect('siswa.user', 'user')
+      .leftJoinAndSelect('siswa.jurusan_detail', 'jurusan')
+      .where('siswa.id_sekolah = :idSekolah', {
+        idSekolah: sekolah.id_sekolah,
+      });
+
+    if (keyword) {
+      qb.andWhere(
+        '(siswa.nisn LIKE :keyword OR user.nama LIKE :keyword OR user.username LIKE :keyword)',
+        { keyword: `%${keyword}%` },
+      );
+    }
+
+    let selectedJurusanName = requestedJurusanName;
+
+    if (Number.isFinite(idJurusan) && idJurusan > 0) {
+      const selectedJurusan = await this.jurusanRepo.findOne({
+        where: {
+          id_jurusan: idJurusan,
+          id_sekolah: sekolah.id_sekolah,
+        },
+      });
+
+      selectedJurusanName =
+        this.clean(selectedJurusan?.nama_jurusan) || requestedJurusanName;
+
+      if (selectedJurusanName) {
+        qb.andWhere(
+          '(siswa.id_jurusan = :idJurusan OR LOWER(TRIM(siswa.jurusan)) = LOWER(TRIM(:selectedJurusanName)))',
+          {
+            idJurusan,
+            selectedJurusanName,
+          },
+        );
+      } else {
+        qb.andWhere('siswa.id_jurusan = :idJurusan', {
+          idJurusan,
+        });
+      }
+    } else if (requestedJurusanName) {
+      qb.andWhere(
+        'LOWER(TRIM(siswa.jurusan)) = LOWER(TRIM(:requestedJurusanName))',
+        { requestedJurusanName },
+      );
+      selectedJurusanName = requestedJurusanName;
+    }
+
+    this.applyKelasFilter(qb, 'siswa', kelas);
+
+    const rows = await qb
+      .orderBy('jurusan.nama_jurusan', 'ASC')
+      .addOrderBy('siswa.jurusan', 'ASC')
+      .addOrderBy('siswa.kelas', 'ASC')
+      .addOrderBy('user.nama', 'ASC')
+      .limit(5000)
+      .getMany();
+
+    if (!rows.length) {
+      throw new NotFoundException(
+        'Tidak ada data siswa yang sesuai dengan filter export.',
+      );
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'SkillLens';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const groupedRows = new Map<string, Siswa[]>();
+
+    for (const siswa of rows) {
+      const jurusanName =
+        this.clean(siswa.jurusan_detail?.nama_jurusan) ||
+        this.clean(siswa.jurusan) ||
+        'Tanpa Jurusan';
+
+      const current = groupedRows.get(jurusanName) || [];
+      current.push(siswa);
+      groupedRows.set(jurusanName, current);
+    }
+
+    const groups = Array.from(groupedRows.entries()).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+
+    for (const [jurusanName, siswaList] of groups) {
+      const worksheet = workbook.addWorksheet(
+        this.toSafeSheetName(jurusanName),
+        {
+          pageSetup: {
+            paperSize: 9,
+            orientation: 'portrait',
+            fitToPage: true,
+            fitToWidth: 1,
+            fitToHeight: 0,
+            horizontalCentered: true,
+            margins: {
+              left: 0.25,
+              right: 0.25,
+              top: 0.3,
+              bottom: 0.3,
+              header: 0.1,
+              footer: 0.1,
+            },
+          },
+        },
+      );
+
+      worksheet.views = [{ showGridLines: false }];
+      worksheet.properties.defaultRowHeight = 20;
+
+      worksheet.columns = [
+        { width: 6 },
+        { width: 14 },
+        { width: 11 },
+        { width: 20 },
+        { width: 3 },
+        { width: 6 },
+        { width: 14 },
+        { width: 11 },
+        { width: 20 },
+      ];
+
+      siswaList.forEach((siswa, index) => {
+        const pairIndex = index % 2;
+        const rowBlock = Math.floor(index / 2);
+        const startRow = 1 + rowBlock * 10;
+        const startCol = pairIndex === 0 ? 1 : 6;
+
+        this.writeStudentCard(worksheet, {
+          startRow,
+          startCol,
+          siswa,
+          jurusanName,
+          nomor: index + 1,
+        });
+      });
+    }
+
+    const bufferOrArray = await workbook.xlsx.writeBuffer();
+    const buffer = Buffer.isBuffer(bufferOrArray)
+      ? bufferOrArray
+      : Buffer.from(bufferOrArray as ArrayBuffer);
+
+    const date = new Date().toISOString().slice(0, 10);
+    const scopeName =
+      selectedJurusanName ||
+      (groups.length === 1 ? groups[0]?.[0] : 'semua-jurusan');
+
+    return {
+      buffer,
+      total: rows.length,
+      filename: `kartu-akun-siswa-${this.toSafeFileSegment(scopeName)}-${date}.xlsx`,
+    };
+  }
+
+  private toSafeSheetName(value: string) {
+    const cleaned = this.clean(value)
+      .replace(/[\\/?*\[\]:]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return (cleaned || 'Data Siswa').slice(0, 31);
+  }
+
+  private toSafeFileSegment(value: string) {
+    return (
+      this.clean(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'siswa'
+    );
+  }
+
+  private writeStudentCard(
+    worksheet: ExcelJS.Worksheet,
+    options: {
+      startRow: number;
+      startCol: number;
+      siswa: Siswa;
+      jurusanName: string;
+      nomor: number;
+    },
+  ) {
+    const { startRow, startCol, siswa, jurusanName, nomor } = options;
+    const endRow = startRow + 7;
+    const endCol = startCol + 3;
+
+    for (let row = startRow; row <= endRow; row += 1) {
+      worksheet.getRow(row).height = row === startRow ? 22 : 20;
+      for (let col = startCol; col <= endCol; col += 1) {
+        const cell = worksheet.getCell(row, col);
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'left',
+          wrapText: true,
+        };
+        cell.font = {
+          name: 'Arial',
+          size: 9,
+        };
+      }
+    }
+
+    worksheet.mergeCells(startRow, startCol, startRow, endCol);
+    const title = worksheet.getCell(startRow, startCol);
+    title.value = 'KARTU AKUN SISWA SKILLLENS';
+    title.font = { name: 'Arial', size: 10, bold: true };
+    title.alignment = { vertical: 'middle', horizontal: 'center' };
+    title.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFEAF6FF' },
+    };
+
+    worksheet.mergeCells(startRow + 1, startCol, startRow + 1, endCol);
+    const subtitle = worksheet.getCell(startRow + 1, startCol);
+    subtitle.value = `No. Kartu: SL-${String(nomor).padStart(4, '0')}  |  ${jurusanName}`;
+    subtitle.font = { name: 'Arial', size: 8, bold: true };
+    subtitle.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    worksheet.mergeCells(startRow + 2, startCol, endRow, startCol + 1);
+    const photo = worksheet.getCell(startRow + 2, startCol);
+    photo.value = 'PAS\nFOTO\n3 x 4';
+    photo.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
+    photo.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+    photo.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF8FAFC' },
+    };
+
+    const rows: Array<[string, string]> = [
+      ['Nama', this.clean(siswa.user?.nama) || '-'],
+      ['NISN', this.clean(siswa.nisn) || '-'],
+      ['Kelas', this.clean(siswa.kelas) || '-'],
+      ['Jurusan', jurusanName || '-'],
+      ['Username', this.clean(siswa.user?.username) || '-'],
+      ['Password', this.clean(siswa.nisn) || '-'],
+    ];
+
+    rows.forEach(([label, value], index) => {
+      const row = startRow + 2 + index;
+      const labelCell = worksheet.getCell(row, startCol + 2);
+      const valueCell = worksheet.getCell(row, startCol + 3);
+
+      labelCell.value = `${label} :`;
+      labelCell.font = { name: 'Arial', size: 8, bold: true };
+      labelCell.alignment = { vertical: 'middle', horizontal: 'left' };
+
+      valueCell.value = value;
+      valueCell.font = { name: 'Arial', size: 8 };
+      valueCell.alignment = {
+        vertical: 'middle',
+        horizontal: 'left',
+        wrapText: true,
+      };
+    });
   }
 
   async listMataPelajaran(userId: number) {

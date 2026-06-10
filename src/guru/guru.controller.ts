@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -63,6 +64,10 @@ export class GuruController {
     return this.guruService.getSiswaAccounts(req.user.id_user);
   }
 
+  @Get('nilai-matrix')
+  listNilaiMatrix(@Req() req: any, @Query() query: any) {
+    return this.guruService.listNilaiMatrix(req.user.id_user, query);
+  }
 
   @Get('siswa/:idSiswa/nilai')
   getNilaiSiswa(@Req() req: any, @Param('idSiswa') idSiswa: string) {

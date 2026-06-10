@@ -128,6 +128,30 @@ export class AdminSekolahController {
     return this.adminSekolahService.listSiswa(req.user.id, query);
   }
 
+  @Get('siswa/export-kartu')
+  async exportSiswaCards(
+    @Req() req: any,
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    const result = await this.adminSekolahService.exportSiswaCards(
+      req.user.id,
+      query,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    res.setHeader('X-Total-Students', String(result.total));
+
+    return res.send(result.buffer);
+  }
+
   @Post('siswa/import')
   @UseInterceptors(FileInterceptor('file'))
   async importSiswa(
